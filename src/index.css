@@ -24,8 +24,8 @@
   }
 }
 
-/* Generated enemy portraits: these are intentionally more physical than a
-   simple background-image. They visibly breathe, lean and recoil. */
+/* Generated enemies use real animated WebP frame sequences. The parent stage
+   handles the readable body motion; the WebP supplies actual frame changes. */
 .generated-enemy-stage {
   isolation: isolate;
   will-change: transform;
@@ -33,40 +33,27 @@
 
 .generated-enemy-art {
   position: absolute;
-  width: 132%;
-  height: 132%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  object-position: center top;
+  object-position: center center;
   user-select: none;
   pointer-events: none;
   transform-origin: 50% 78%;
   filter: drop-shadow(0 12px 18px rgba(0,0,0,.92));
-  will-change: transform, filter;
 }
 
-.generated-enemy-art-skeleton {
-  animation: enemy-skeleton-idle 1.85s ease-in-out infinite;
-}
-.generated-enemy-art-minotaur {
-  animation: enemy-minotaur-idle 1.65s ease-in-out infinite;
-}
 .generated-enemy-art-phoenix {
-  width: 145%;
-  height: 145%;
-  animation: enemy-phoenix-idle 1.35s ease-in-out infinite;
+  width: 108%;
+  height: 108%;
 }
 
-.generated-enemy-attack .generated-enemy-art-skeleton,
-.generated-enemy-attack .generated-enemy-art-minotaur,
-.generated-enemy-attack .generated-enemy-art-phoenix {
-  animation: enemy-attack-lunge .52s cubic-bezier(.18,.82,.2,1) both;
+.generated-enemy-attack .generated-enemy-art {
+  filter: brightness(1.12) saturate(1.18) drop-shadow(0 0 22px rgba(255,120,30,.65));
 }
 
-.generated-enemy-hit .generated-enemy-art-skeleton,
-.generated-enemy-hit .generated-enemy-art-minotaur,
-.generated-enemy-hit .generated-enemy-art-phoenix {
-  animation: enemy-hit-recoil .34s cubic-bezier(.2,.8,.3,1) both;
-  filter: brightness(1.8) saturate(1.35) drop-shadow(0 0 22px rgba(255,70,70,.95));
+.generated-enemy-hit .generated-enemy-art {
+  filter: brightness(1.5) saturate(1.3) drop-shadow(0 0 24px rgba(255,60,60,.9));
 }
 
 .generated-enemy-phoenix .generated-enemy-art {
@@ -84,7 +71,7 @@
   width: 4px;
   height: 4px;
   border-radius: 999px;
-  opacity: .15;
+  opacity: .3;
   animation: enemy-spark-rise 1.7s ease-in-out infinite;
 }
 .enemy-spark-a { left: 18%; bottom: 24%; animation-delay: 0s; background: #a855f7; box-shadow: 0 0 9px #a855f7; }

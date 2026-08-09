@@ -9,9 +9,15 @@ import impImg from '../assets/images/imp_spritesheet.png';
 import skeletonImg from '../assets/images/skeleton_spritesheet.png';
 import vampireImg from '../assets/images/vampire_boss_spritesheet.png';
 import krakenImg from '../assets/images/kraken_boss_spritesheet.png';
-import minotaurPortrait from '../assets/images/generated/minotaur_generated_portrait.png';
-import phoenixPortrait from '../assets/images/generated/phoenix_generated_portrait.png';
-import skeletonPortrait from '../assets/images/generated/skeleton_generated_portrait.png';
+import minotaurIdle from '../assets/images/generated/minotaur_idle.webp';
+import minotaurAttack from '../assets/images/generated/minotaur_attack.webp';
+import minotaurHit from '../assets/images/generated/minotaur_hit.webp';
+import phoenixIdle from '../assets/images/generated/phoenix_idle.webp';
+import phoenixAttack from '../assets/images/generated/phoenix_attack.webp';
+import phoenixHit from '../assets/images/generated/phoenix_hit.webp';
+import skeletonIdle from '../assets/images/generated/skeleton_idle.webp';
+import skeletonAttack from '../assets/images/generated/skeleton_attack.webp';
+import skeletonHit from '../assets/images/generated/skeleton_hit.webp';
 import { EnemyType } from '../types';
 import { cn } from '../utils';
 import { speakMobTaunt } from '../utils/mobTaunts';
@@ -25,11 +31,11 @@ interface BossModelProps {
   weakElement?: 'water' | 'fire' | 'earth';
 }
 
-const generatedPortraits: Partial<Record<EnemyType, string>> = {
-  skeleton: skeletonPortrait,
-  mummy: skeletonPortrait,
-  minotaur: minotaurPortrait,
-  phoenix: phoenixPortrait,
+const generatedAnimations: Partial<Record<EnemyType, Record<'idle' | 'attack' | 'hit', string>>> = {
+  skeleton: { idle: skeletonIdle, attack: skeletonAttack, hit: skeletonHit },
+  mummy: { idle: skeletonIdle, attack: skeletonAttack, hit: skeletonHit },
+  minotaur: { idle: minotaurIdle, attack: minotaurAttack, hit: minotaurHit },
+  phoenix: { idle: phoenixIdle, attack: phoenixAttack, hit: phoenixHit },
 };
 
 export const BossModel: React.FC<BossModelProps> = ({
@@ -41,8 +47,8 @@ export const BossModel: React.FC<BossModelProps> = ({
 }) => {
   const [dialogue, setDialogue] = useState<string | null>(null);
   const [frame, setFrame] = useState(0);
-  const portrait = generatedPortraits[type];
-  const isGeneratedPortrait = Boolean(portrait);
+  const generatedSet = generatedAnimations[type];
+  const isGeneratedPortrait = Boolean(generatedSet);
 
   // Existing sprite-sheet enemies still use their original art. The sheet now
   // advances continuously, while the parent motion adds sub-frame smoothness.
@@ -76,22 +82,24 @@ export const BossModel: React.FC<BossModelProps> = ({
 
   const variants = useMemo(() => ({
     idle: {
-      y: [-3, 3, -3],
-      rotateZ: [-0.7, 0.7, -0.7],
-      scale: [1, 1.012, 1],
-      transition: { repeat: Infinity, duration: type === 'phoenix' ? 1.8 : 2.1, ease: 'easeInOut' },
+      y: [0, -10, -4, 0, 5, 0],
+      x: [0, -3, 3, 0],
+      rotateZ: [-2, 2, -1.5, 1.5, -2],
+      scale: [1, 1.035, 0.985, 1.025, 1],
+      transition: { repeat: Infinity, duration: type === 'phoenix' ? 1.25 : type === 'minotaur' ? 1.55 : 1.8, ease: 'easeInOut' },
     },
     hit: {
-      scale: [1, 1.08, 0.94, 1],
-      x: [-8, 10, -7, 4, 0],
-      rotateZ: [-3, 4, -2, 1, 0],
+      scale: [1, 1.18, 0.88, 1.08, 0.98, 1],
+      x: [-18, 28, -18, 10, -4, 0],
+      y: [0, -4, 10, -3, 2, 0],
+      rotateZ: [-7, 9, -6, 4, -1, 0],
       transition: { duration: 0.32, ease: 'easeOut' },
     },
     attack: {
-      scale: [1, 1.04, 1.13, 0.98, 1],
-      x: [0, -12, 30, 6, 0],
-      y: [0, -5, 8, -2, 0],
-      rotateZ: [0, -3, 8, -2, 0],
+      scale: [1, 1.12, 1.28, 0.92, 1.08, 1],
+      x: [0, -28, 52, 18, -6, 0],
+      y: [0, -10, 18, -4, 3, 0],
+      rotateZ: [0, -8, 14, -6, 2, 0],
       transition: { duration: type === 'minotaur' ? 0.62 : 0.52, ease: 'easeOut' },
     },
   }), [type]);
@@ -194,7 +202,8 @@ export const BossModel: React.FC<BossModelProps> = ({
       >
         {isGeneratedPortrait ? (
           <img
-            src={portrait}
+            key={`${type}-${currentState}`}
+            src={generatedSet![currentState]}
             alt=""
             draggable={false}
             className={cn('generated-enemy-art', `generated-enemy-art-${type}`)}
