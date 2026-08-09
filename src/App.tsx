@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Heart, Coins, Play, RefreshCw, ShoppingCart, Crown, XCircle, Trophy, Skull, Map, Shield, Sword, Flame, Droplet, Leaf, Sparkles, Info, Package, Volume2, VolumeX } from 'lucide-react';
 import { Gem, GameState, DamageNumber, GemType, MapNode, EquipmentSlot, Equipment, ShopItem, EnemyType, SpecialGemType } from './types';
-import { generateGrid, findMatches, analyzeMatches, isAdjacent, createRandomGem, findHint, getConnectedSameTypeCluster } from './gameLogic';
+import { generateSolvableGrid, findMatches, analyzeMatches, isAdjacent, createRandomGem, findHint, getConnectedSameTypeCluster } from './gameLogic';
 import { generateMap, generateRandomEquipment, calculateTotalStats, getRarityColor, getRarityBadge, getItemPrice } from './roguelike';
 import { ROWS, COLS, MATCH_DELAY, DROP_DELAY, SWIPE_LIMIT } from './constants';
 import { GemIcon } from './components/GemIcon';
@@ -365,6 +365,13 @@ export default function App() {
     }
 
     if (finalMatchedIds.size === 0) {
+      // Board has settled with nothing left to cascade — make sure the
+      // player actually has a legal move available. If not, reshuffle
+      // instead of leaving them stuck on a dead board.
+      if (!findHint(currentGems)) {
+        addDamageNumber('No moves left — reshuffling!', 'combo', window.innerWidth / 2, window.innerHeight / 2);
+        setGems(generateSolvableGrid());
+      }
       setIsProcessing(false);
       return;
     }
@@ -940,7 +947,7 @@ export default function App() {
         bossAbilityCooldown: isBoss ? 15 : 20,
         bossStunTimer: 0,
       }));
-      setGems(generateGrid());
+      setGems(generateSolvableGrid());
     } else if (node.type === 'rest') {
       stopBGM();
       setIsMusicPlaying(false);

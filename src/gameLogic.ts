@@ -29,6 +29,20 @@ export const generateGrid = (): Gem[] => {
   return grid.flat();
 };
 
+// Like generateGrid, but also guarantees the board has at least one legal move
+// available so the player is never handed (or left on) a board that's
+// impossible to play. Used both for the initial deal and to reshuffle when a
+// stalemate is detected mid-game.
+export const generateSolvableGrid = (): Gem[] => {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const grid = generateGrid();
+    if (findHint(grid)) return grid;
+  }
+  // Astronomically unlikely to ever fall through, but return the last
+  // attempt rather than nothing if it somehow does.
+  return generateGrid();
+};
+
 export interface SpecialGemCreation {
   row: number;
   col: number;
