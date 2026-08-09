@@ -1,12 +1,15 @@
-import { useCallback, useEffect } from 'react';
-import { audio } from '../audio';
-import { GemType } from '../types';
+import { useCallback, useEffect, useState } from 'react';
+import { audio, MUSIC_TRACKS, MusicTrackInfo } from '../audio';
+import { GemType, EnemyType } from '../types';
 
 export interface UseGameAudioOptions {
   autoInitOnInteraction?: boolean;
 }
 
 export function useGameAudio(options: UseGameAudioOptions = { autoInitOnInteraction: true }) {
+  const [currentTrack, setCurrentTrack] = useState<MusicTrackInfo>(() => audio.getCurrentTrack());
+  const [isMuted, setIsMuted] = useState<boolean>(() => audio.getIsMuted());
+
   // Auto-initialize web audio on first user click or touch
   useEffect(() => {
     if (!options.autoInitOnInteraction) return;
@@ -28,7 +31,6 @@ export function useGameAudio(options: UseGameAudioOptions = { autoInitOnInteract
 
   // Trigger audio feedback for match-3 events with elemental sound synthesis & chain pitch scaling
   const playMatchSFX = useCallback((gemTypes: GemType[], comboMultiplier = 1, chainCount = 1) => {
-    // Collect unique matched gem types
     const uniqueTypes = Array.from(new Set(gemTypes));
 
     if (uniqueTypes.length === 0) {
@@ -36,27 +38,23 @@ export function useGameAudio(options: UseGameAudioOptions = { autoInitOnInteract
       return;
     }
 
-    // Play primary elemental sound for the dominant matched gem
     uniqueTypes.forEach((type, idx) => {
       setTimeout(() => {
         audio.playElementalMatch(type, chainCount, comboMultiplier);
       }, idx * 40);
     });
 
-    // If chain combo is 2+, trigger additional arpeggio fanfare
     if (chainCount >= 2) {
       audio.playChainComboFanfare(chainCount);
     }
   }, []);
 
-  // Trigger dedicated chain combo fanfare for high-streak combos
   const playChainComboSFX = useCallback((chainCount: number) => {
     if (chainCount >= 2) {
       audio.playChainComboFanfare(chainCount);
     }
   }, []);
 
-  // Trigger audio feedback for enemy attacks and boss abilities
   const playEnemyAttackSFX = useCallback((isBoss = false, isAbility = false) => {
     if (isAbility) {
       audio.playBossAbilitySound();
@@ -65,27 +63,30 @@ export function useGameAudio(options: UseGameAudioOptions = { autoInitOnInteract
     }
   }, []);
 
-  // Trigger player tile swap sound
+  const playBossIntroSFX = useCallback((enemyType?: EnemyType) => {
+    audio.playBossIntimidatingEntrance(enemyType);
+  }, []);
+
+  const playRoundIntroSFX = useCallback((roundNum: number, isBoss = false, enemyType?: EnemyType) => {
+    audio.playRoundIntroSound(roundNum, isBoss, enemyType);
+  }, []);
+
   const playSwapSFX = useCallback(() => {
     audio.playSwapSound();
   }, []);
 
-  // Trigger invalid move / error sound
   const playErrorSFX = useCallback(() => {
     audio.playErrorSound();
   }, []);
 
-  // Trigger victory sound
   const playVictorySFX = useCallback(() => {
     audio.playVictorySound();
   }, []);
 
-  // Trigger defeat sound
   const playDefeatSFX = useCallback(() => {
     audio.playDefeatSound();
   }, []);
 
-  // Trigger special gem combo sound effects
   const playBombSFX = useCallback(() => {
     audio.playBombExplosionSFX();
   }, []);
@@ -118,12 +119,35 @@ export function useGameAudio(options: UseGameAudioOptions = { autoInitOnInteract
     audio.playChainPulseSFX();
   }, []);
 
-  const toggleBGM = useCallback(() => {
-    return audio.toggleBGM();
+  const playRuneCrackSFX = useCallback(() => {
+    audio.playRuneCrackSound();
   }, []);
 
-  const startBGM = useCallback(() => {
-    audio.startBGM();
+  const playRuneShatterSFX = useCallback(() => {
+    audio.playRuneShatterSound();
+  }, []);
+
+  const playRuneVaultUnlockedSFX = useCallback(() => {
+    audio.playRuneVaultUnlockedSound();
+  }, []);
+
+  const playIceLockedSFX = useCallback(() => {
+    audio.playIceLockedSound();
+  }, []);
+
+  const playRelicBurstSFX = useCallback(() => {
+    audio.playRelicBurstSound();
+  }, []);
+
+  const toggleBGM = useCallback(() => {
+    const active = audio.toggleBGM();
+    setCurrentTrack(audio.getCurrentTrack());
+    return active;
+  }, []);
+
+  const startBGM = useCallback((trackId?: number) => {
+    audio.startBGM(trackId);
+    setCurrentTrack(audio.getCurrentTrack());
   }, []);
 
   const stopBGM = useCallback(() => {
@@ -134,10 +158,39 @@ export function useGameAudio(options: UseGameAudioOptions = { autoInitOnInteract
     return audio.isBGMActive();
   }, []);
 
+  const setTrack = useCallback((trackId: number) => {
+    audio.setTrack(trackId);
+    setCurrentTrack(audio.getCurrentTrack());
+  }, []);
+
+  const nextTrack = useCallback(() => {
+    const trk = audio.nextTrack();
+    setCurrentTrack(trk);
+    return trk;
+  }, []);
+
+  const prevTrack = useCallback(() => {
+    const trk = audio.prevTrack();
+    setCurrentTrack(trk);
+    return trk;
+  }, []);
+
+  const toggleMute = useCallback(() => {
+    const muted = audio.toggleMute();
+    setIsMuted(muted);
+    return muted;
+  }, []);
+
+  const setVolume = useCallback((vol: number) => {
+    audio.setVolume(vol);
+  }, []);
+
   return {
     playMatchSFX,
     playChainComboSFX,
     playEnemyAttackSFX,
+    playBossIntroSFX,
+    playRoundIntroSFX,
     playSwapSFX,
     playErrorSFX,
     playVictorySFX,
@@ -150,10 +203,23 @@ export function useGameAudio(options: UseGameAudioOptions = { autoInitOnInteract
     playDarkSFX,
     playCritSFX,
     playChainPulseSFX,
+    playRuneCrackSFX,
+    playRuneShatterSFX,
+    playRuneVaultUnlockedSFX,
+    playIceLockedSFX,
+    playRelicBurstSFX,
     toggleBGM,
     startBGM,
     stopBGM,
     isBGMActive,
+    currentTrack,
+    setTrack,
+    nextTrack,
+    prevTrack,
+    isMuted,
+    toggleMute,
+    setVolume,
+    allTracks: MUSIC_TRACKS,
     audioEngine: audio,
   };
 }

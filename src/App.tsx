@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useAnimation } from 'motion/react';
-import { Heart, Coins, Play, RefreshCw, ShoppingCart, Crown, XCircle, Trophy, Skull, Map, Shield, Sword, Flame, Droplet, Leaf, Sparkles, Info, Package, Volume2, VolumeX, Lightbulb } from 'lucide-react';
-import { Gem, GameState, DamageNumber, GemType, MapNode, EquipmentSlot, Equipment, ShopItem, EnemyType, SpecialGemType } from './types';
-import { generateSolvableGrid, findMatches, analyzeMatches, isAdjacent, createRandomGem, findHint, getConnectedSameTypeCluster, shuffleGems } from './gameLogic';
+import { Heart, Coins, Play, RefreshCw, ShoppingCart, Crown, XCircle, Trophy, Skull, Map, Shield, Sword, Flame, Droplet, Leaf, Sparkles, Info, Package, Volume2, VolumeX, Lightbulb, Music, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Gem, GameState, DamageNumber, GemType, MapNode, EquipmentSlot, Equipment, ShopItem, EnemyType, SpecialGemType, RuneSeal } from './types';
+import { generateSolvableGrid, findMatches, analyzeMatches, isAdjacent, createRandomGem, findHint, getConnectedSameTypeCluster, shuffleGems, generateStageRuneSeals, checkRuneSealHits, isCellFrozen } from './gameLogic';
 import { generateMap, generateRandomEquipment, calculateTotalStats, getRarityColor, getRarityBadge, getItemPrice } from './roguelike';
 import { ROWS, COLS, MATCH_DELAY, DROP_DELAY, SWIPE_LIMIT } from './constants';
 import { GemIcon } from './components/GemIcon';
+import { RuneSealTile } from './components/RuneSealTile';
 import { DamageOverlay } from './components/DamageOverlay';
 import { BossModel } from './components/BossModel';
 import { VFXCanvas, Particle, spawnExplosion, spawnFireEmbers, spawnWaterSplash, spawnEarthDust, spawnSwordSparks, spawnHeartAura, spawnElementalAura } from './components/VFXCanvas';
@@ -20,6 +21,8 @@ import { audio } from './audio';
 import { useGameAudio } from './hooks/useGameAudio';
 import { cn } from './utils';
 import { Confetti } from './components/Confetti';
+import { ItemSprite } from './components/ItemSprite';
+import { DevDebugModal } from './components/DevDebugModal';
 
 import dragonBg from './assets/images/dragon_bg_1786210057193.jpg';
 import elfBg from './assets/images/elf_bg_1786210084496.jpg';
@@ -252,6 +255,24 @@ const generateChapterMapNodes = (chapterNum: number): MapNode[][] => {
   return layers;
 };
 
+interface FlyingCoin {
+  id: number;
+  startX: number;
+  startY: number;
+  targetX: number;
+  targetY: number;
+  delay: number;
+}
+
+interface FlyingItemDrop {
+  id: number;
+  item: Equipment;
+  startX: number;
+  startY: number;
+  targetX: number;
+  targetY: number;
+}
+
 export default function App() {
   const [gameState, setGameState] = useState<GameState>({
     status: 'menu',
@@ -267,6 +288,11 @@ export default function App() {
     enemyType: 'dragon',
     bossAbilityCooldown: 15,
     bossStunTimer: 0,
+    runeSeals: [],
+    totalSealsInStage: 0,
+    cleansedSealsCount: 0,
+    relicBurstCharge: 0,
+    relicSteps: 0,
     mapNodes: [],
     currentLayer: 0,
     stats: {
@@ -287,6 +313,23 @@ export default function App() {
   const [isTipsOpen, setIsTipsOpen] = useState(false);
   const [selectedEqModal, setSelectedEqModal] = useState<Equipment | null>(null);
   const [travelingNode, setTravelingNode] = useState<MapNode | null>(null);
+
+  // Developer & Debug Suite State
+  const [isDevMenuOpen, setIsDevMenuOpen] = useState(false);
+  const [isGameFrozen, setIsGameFrozen] = useState(false);
+  const [isGodMode, setIsGodMode] = useState(false);
+
+  // Dev Menu hotkey listener (~, `, F2)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === '`' || e.key === '~' || e.key === 'F2') {
+        e.preventDefault();
+        setIsDevMenuOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const [shopMerchantMsg, setShopMerchantMsg] = useState<string>(
     "Welcome to Barnaby's Shop! Browse my fine collection of deadly armors and enchanted blades!"
@@ -333,15 +376,17 @@ export default function App() {
   // valid 3-match so they can find one without hunting the whole board.
   const IDLE_HINT_DELAY = 5000; // ms of inactivity before showing a hint
   const [hintGemIds, setHintGemIds] = useState<string[]>([]);
+  const [shakingSealId, setShakingSealId] = useState<string | null>(null);
+
   useEffect(() => {
     setHintGemIds([]); // any board/selection change clears the previous hint
     if (gameState.status !== 'playing' || isProcessing) return;
     const timer = setTimeout(() => {
-      const hint = findHint(gems);
+      const hint = findHint(gems, gameState.runeSeals);
       if (hint) setHintGemIds(hint);
     }, IDLE_HINT_DELAY);
     return () => clearTimeout(timer);
-  }, [gems, isProcessing, gameState.status, selectedGemId]);
+  }, [gems, isProcessing, gameState.status, gameState.runeSeals, selectedGemId]);
   const [damageNumbers, setDamageNumbers] = useState<DamageNumber[]>([]);
   const [enemyHit, setEnemyHit] = useState(false);
   const [enemyAttacking, setEnemyAttacking] = useState(false);
@@ -353,6 +398,79 @@ export default function App() {
   const MAX_CHAIN_TIMER = 4.5;
   const [chainCombo, setChainCombo] = useState(0);
   const [chainTimer, setChainTimer] = useState(0);
+
+  // Flying Loot Animations (Coins & Items going into Bag)
+  const [flyingCoins, setFlyingCoins] = useState<FlyingCoin[]>([]);
+  const [flyingItemDrop, setFlyingItemDrop] = useState<FlyingItemDrop | null>(null);
+  const [bagBumping, setBagBumping] = useState(false);
+  const [goldBumping, setGoldBumping] = useState(false);
+  const [lootToast, setLootToast] = useState<{ name: string; rarity: string; icon: string } | null>(null);
+
+  const spawnLootDropEffects = (gold: number, item: Equipment | null) => {
+    const startX = window.innerWidth / 2;
+    const startY = window.innerHeight * 0.28;
+
+    const goldElem = document.getElementById('combat-gold-counter');
+    const bagElem = document.getElementById('combat-bag-button');
+
+    const goldRect = goldElem?.getBoundingClientRect();
+    const bagRect = bagElem?.getBoundingClientRect();
+
+    const targetGoldX = goldRect ? goldRect.left + goldRect.width / 2 : window.innerWidth * 0.28;
+    const targetGoldY = goldRect ? goldRect.top + goldRect.height / 2 : 36;
+
+    const targetBagX = bagRect ? bagRect.left + bagRect.width / 2 : window.innerWidth * 0.55;
+    const targetBagY = bagRect ? bagRect.top + bagRect.height / 2 : 36;
+
+    // Spawn flying gold coins
+    const count = Math.min(8, Math.max(5, Math.floor(gold / 7)));
+    const coins: FlyingCoin[] = Array.from({ length: count }).map((_, i) => ({
+      id: Date.now() + i + Math.random(),
+      startX: startX + (Math.random() - 0.5) * 50,
+      startY: startY + (Math.random() - 0.5) * 30,
+      targetX: targetGoldX,
+      targetY: targetGoldY,
+      delay: i * 0.06,
+    }));
+    setFlyingCoins(coins);
+
+    setTimeout(() => {
+      setGoldBumping(true);
+      audio.playTone(850, 'sine', 0.08, 0.25);
+      setTimeout(() => audio.playTone(1050, 'triangle', 0.1, 0.25), 50);
+      setTimeout(() => setGoldBumping(false), 350);
+    }, 600);
+
+    setTimeout(() => {
+      setFlyingCoins([]);
+    }, 900);
+
+    // If an item dropped, spawn flying item drop
+    if (item) {
+      const dropObj: FlyingItemDrop = {
+        id: Date.now() + 999,
+        item,
+        startX,
+        startY,
+        targetX: targetBagX,
+        targetY: targetBagY,
+      };
+      setFlyingItemDrop(dropObj);
+      setLootToast({ name: item.name, rarity: item.rarity, icon: item.icon || '📦' });
+
+      setTimeout(() => {
+        setBagBumping(true);
+        audio.playTone(650, 'sine', 0.1, 0.3);
+        setTimeout(() => audio.playTone(880, 'sine', 0.15, 0.3), 80);
+        setTimeout(() => setBagBumping(false), 400);
+      }, 750);
+
+      setTimeout(() => {
+        setFlyingItemDrop(null);
+        setTimeout(() => setLootToast(null), 2200);
+      }, 1000);
+    }
+  };
 
   const chainComboRef = useRef(chainCombo);
   useEffect(() => {
@@ -380,6 +498,8 @@ export default function App() {
     playMatchSFX,
     playChainComboSFX,
     playEnemyAttackSFX,
+    playBossIntroSFX,
+    playRoundIntroSFX,
     playSwapSFX,
     playErrorSFX,
     playVictorySFX,
@@ -391,11 +511,36 @@ export default function App() {
     playRainbowSFX,
     playSpecialCreatedSFX,
     playChainPulseSFX,
+    playRuneCrackSFX,
+    playRuneShatterSFX,
+    playRuneVaultUnlockedSFX,
+    playIceLockedSFX,
+    playRelicBurstSFX,
     toggleBGM,
     startBGM,
     stopBGM,
     isBGMActive,
+    currentTrack,
+    nextTrack,
+    prevTrack,
+    toggleMute,
+    isMuted,
   } = useGameAudio();
+
+  const triggerFrozenFeedback = (row: number, col: number) => {
+    const seal = (gameState.runeSeals || []).find(s => s.row === row && s.col === col && s.hp > 0);
+    if (seal) {
+      setShakingSealId(seal.id);
+      setTimeout(() => setShakingSealId(null), 300);
+    }
+    playIceLockedSFX();
+    const gridContainer = document.getElementById('gem-grid-container');
+    const gridRect = gridContainer?.getBoundingClientRect();
+    const x = gridRect ? gridRect.left + col * GEM_SIZE + GEM_SIZE / 2 : window.innerWidth / 2;
+    const y = gridRect ? gridRect.top + row * GEM_SIZE + GEM_SIZE / 2 : window.innerHeight / 2;
+    addDamageNumber('🧊 FROZEN!', 'crit', x, y - 20);
+    setParticles(prev => [...prev, ...spawnExplosion(x, y, '#67e8f9', 8)]);
+  };
 
   const lastSwappedPosRef = useRef<{ row: number; col: number } | undefined>(undefined);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
@@ -487,14 +632,17 @@ export default function App() {
               if (otherSpecial) explodeQueue.push({ ...g, special: otherSpecial });
             }
           });
-        } else if ((g1.special === 'light_holy' || g1.special === 'dark_void') && (g2.special === 'light_holy' || g2.special === 'dark_void')) {
+        } else if (
+          (g1.special === 'arrow_horizontal' || g1.special === 'arrow_vertical' || g1.special === 'light_holy' || g1.special === 'dark_void') &&
+          (g2.special === 'arrow_horizontal' || g2.special === 'arrow_vertical' || g2.special === 'light_holy' || g2.special === 'dark_void')
+        ) {
           // Cross laser (row + col)!
           hasLine = true;
           currentGems.filter(g => g.row === g2.row || g.col === g2.col).forEach(g => {
             finalMatchedIds.add(g.id);
             if (g.special) explodeQueue.push(g);
           });
-        } else if (g1.special === 'bomb_3x3' && g2.special === 'bomb_3x3') {
+        } else if ((g1.special === 'bomb_cross' || g1.special === 'bomb_3x3') && (g2.special === 'bomb_cross' || g2.special === 'bomb_3x3')) {
           // Mega Bomb! Two bombs combine to create a massive 5x5 explosion
           hasBomb = true;
           currentGems.filter(g => Math.abs(g.row - g2.row) <= 2 && Math.abs(g.col - g2.col) <= 2).forEach(g => {
@@ -502,7 +650,7 @@ export default function App() {
             if (g.special) explodeQueue.push(g);
           });
         } else {
-          // Bomb + Line = 3 Rows + 3 Cols Mega Explosion!
+          // Bomb + Arrow = 3 Rows + 3 Cols Mega Cross Explosion!
           hasBomb = true;
           hasLine = true;
           currentGems.filter(g => Math.abs(g.row - g2.row) <= 1 || Math.abs(g.col - g2.col) <= 1).forEach(g => {
@@ -510,23 +658,17 @@ export default function App() {
             if (g.special) explodeQueue.push(g);
           });
         }
-      } else if (g1.special || g2.special) {
-        // SPECIAL + REGULAR GEM SWAP!
-        const spec = g1.special ? g1 : g2;
-        const reg = g1.special ? g2 : g1;
+      } else if (g1.special === 'rainbow' || g2.special === 'rainbow') {
+        // Rainbow + Regular -> Destroy all gems of that regular type!
+        const spec = g1.special === 'rainbow' ? g1 : g2;
+        const reg = g1.special === 'rainbow' ? g2 : g1;
 
         finalMatchedIds.add(spec.id);
-
-        if (spec.special === 'rainbow') {
-          // Rainbow + Regular -> Destroy all gems of that regular type!
-          hasRainbow = true;
-          currentGems.filter(g => g.type === reg.type).forEach(g => {
-            finalMatchedIds.add(g.id);
-            if (g.special) explodeQueue.push(g);
-          });
-        } else {
-          explodeQueue.push(spec);
-        }
+        hasRainbow = true;
+        currentGems.filter(g => g.type === reg.type).forEach(g => {
+          finalMatchedIds.add(g.id);
+          if (g.special) explodeQueue.push(g);
+        });
       }
     }
 
@@ -544,7 +686,8 @@ export default function App() {
       processedSpecialIds.add(g.id);
       finalMatchedIds.add(g.id);
 
-      if (g.special === 'light_holy') {
+      if (g.special === 'arrow_horizontal' || g.special === 'light_holy') {
+        // Horizontal laser beam across row
         hasLine = true;
         currentGems.filter(other => other.row === g.row).forEach(other => {
           finalMatchedIds.add(other.id);
@@ -552,9 +695,20 @@ export default function App() {
             explodeQueue.push(other);
           }
         });
-      } else if (g.special === 'dark_void') {
+      } else if (g.special === 'arrow_vertical' || g.special === 'dark_void') {
+        // Vertical laser beam down column
         hasLine = true;
         currentGems.filter(other => other.col === g.col).forEach(other => {
+          finalMatchedIds.add(other.id);
+          if (other.special && !processedSpecialIds.has(other.id)) {
+            explodeQueue.push(other);
+          }
+        });
+      } else if (g.special === 'bomb_cross') {
+        // Cross Bomb: Detonates BOTH horizontally AND vertically across row and col!
+        hasBomb = true;
+        hasLine = true;
+        currentGems.filter(other => other.row === g.row || other.col === g.col).forEach(other => {
           finalMatchedIds.add(other.id);
           if (other.special && !processedSpecialIds.has(other.id)) {
             explodeQueue.push(other);
@@ -584,7 +738,7 @@ export default function App() {
       // Board has settled with nothing left to cascade — make sure the
       // player actually has a legal move available. If not, reshuffle
       // instead of leaving them stuck on a dead board.
-      if (!findHint(currentGems)) {
+      if (!findHint(currentGems, gameState.runeSeals)) {
         addDamageNumber('No moves left — reshuffling!', 'combo', window.innerWidth / 2, window.innerHeight / 2);
         
         // Clear board to trigger exit animations
@@ -592,7 +746,7 @@ export default function App() {
         
         // Wait for exit animations to complete before showing the shuffled board
         setTimeout(() => {
-          setGems(shuffleGems(currentGems));
+          setGems(shuffleGems(currentGems, gameState.runeSeals));
           setIsProcessing(false);
         }, 500);
         return;
@@ -633,7 +787,13 @@ export default function App() {
       const x = gridRect ? gridRect.left + s.col * GEM_SIZE + GEM_SIZE / 2 : window.innerWidth / 2;
       const y = gridRect ? gridRect.top + s.row * GEM_SIZE + GEM_SIZE / 2 : window.innerHeight / 2;
 
-      if (s.specialType === 'light_holy' || s.specialType === 'dark_void') {
+      if (s.specialType === 'arrow_horizontal') {
+        addDamageNumber('🏹 HORIZONTAL ARROW!', 'combo', x, y - 20);
+      } else if (s.specialType === 'arrow_vertical') {
+        addDamageNumber('🏹 VERTICAL ARROW!', 'combo', x, y - 20);
+      } else if (s.specialType === 'bomb_cross') {
+        addDamageNumber('💣 CROSS BOMB!', 'combo', x, y - 20);
+      } else if (s.specialType === 'light_holy' || s.specialType === 'dark_void') {
         addDamageNumber('⚡ MAGIC GEM!', 'combo', x, y - 20);
       } else if (s.specialType === 'bomb_3x3') {
         addDamageNumber('💣 SUPER BOMB!', 'combo', x, y - 20);
@@ -653,6 +813,9 @@ export default function App() {
     const gridRect = gridEl ? gridEl.getBoundingClientRect() : null;
 
     matchedGems.forEach(g => {
+      const isPrimaryMatch = matchedIds.has(g.id);
+      const blastScaling = isPrimaryMatch ? 1.0 : 0.4; // Balanced damage scaling for secondary blast clears
+
       const x = gridRect 
         ? gridRect.left + g.col * GEM_SIZE + GEM_SIZE / 2 
         : window.innerWidth / 2 - (COLS * GEM_SIZE) / 2 + g.col * GEM_SIZE + GEM_SIZE / 2;
@@ -666,48 +829,48 @@ export default function App() {
       
       switch(g.type) {
         case 'sword': 
-          gemDmg = Math.floor(totalStats.attack * 0.5); 
+          gemDmg = Math.floor(totalStats.attack * 0.45 * blastScaling); 
           color = '#cbd5e1'; 
           newParticles = newParticles.concat(spawnSwordSparks(x, y, 16));
           break;
         case 'fire': 
-          gemDmg = Math.floor(totalStats.attack * 0.8) + (totalStats.fireDmg || 0); 
+          gemDmg = Math.floor((totalStats.attack * 0.55 + (totalStats.fireDmg || 0)) * blastScaling); 
           if (totalStats.passives.some(p => p.type === 'elementBoost' && p.element === 'fire')) {
-            gemDmg = Math.floor(gemDmg * 1.5);
+            gemDmg = Math.floor(gemDmg * 1.3);
           }
           color = '#f87171'; 
-          newParticles = newParticles.concat(spawnFireEmbers(x, y, 22));
+          newParticles = newParticles.concat(spawnFireEmbers(x, y, 20));
           break;
         case 'water': 
-          gemDmg = Math.floor(totalStats.attack * 0.6) + (totalStats.waterDmg || 0); 
+          gemDmg = Math.floor((totalStats.attack * 0.5 + (totalStats.waterDmg || 0)) * blastScaling); 
           if (totalStats.passives.some(p => p.type === 'elementBoost' && p.element === 'water')) {
-            gemDmg = Math.floor(gemDmg * 1.5);
+            gemDmg = Math.floor(gemDmg * 1.3);
           }
           color = '#60a5fa'; 
-          newParticles = newParticles.concat(spawnWaterSplash(x, y, 22));
+          newParticles = newParticles.concat(spawnWaterSplash(x, y, 20));
           break;
         case 'earth': 
-          gemDmg = Math.floor(totalStats.attack * 0.6) + (totalStats.earthDmg || 0); 
+          gemDmg = Math.floor((totalStats.attack * 0.5 + (totalStats.earthDmg || 0)) * blastScaling); 
           if (totalStats.passives.some(p => p.type === 'elementBoost' && p.element === 'earth')) {
-            gemDmg = Math.floor(gemDmg * 1.5);
+            gemDmg = Math.floor(gemDmg * 1.3);
           }
           color = '#34d399'; 
-          newParticles = newParticles.concat(spawnEarthDust(x, y, 24));
+          newParticles = newParticles.concat(spawnEarthDust(x, y, 20));
           break;
         case 'light': 
-          gemDmg = Math.floor(totalStats.attack * 0.7) + (totalStats.lightDmg || 0); 
+          gemDmg = Math.floor((totalStats.attack * 0.52 + (totalStats.lightDmg || 0)) * blastScaling); 
           color = '#fde047'; 
-          newParticles = newParticles.concat(spawnExplosion(x, y, color, 20));
+          newParticles = newParticles.concat(spawnExplosion(x, y, color, 18));
           break;
         case 'dark': 
-          gemDmg = Math.floor(totalStats.attack * 0.7) + (totalStats.darkDmg || 0); 
+          gemDmg = Math.floor((totalStats.attack * 0.52 + (totalStats.darkDmg || 0)) * blastScaling); 
           color = '#a855f7'; 
-          newParticles = newParticles.concat(spawnExplosion(x, y, color, 20));
+          newParticles = newParticles.concat(spawnExplosion(x, y, color, 18));
           break;
         case 'heart': 
-          gemHeal += Math.floor(totalStats.maxHp * 0.08); 
+          gemHeal += Math.floor((totalStats.maxHp * 0.05) * blastScaling); 
           color = '#f472b6'; 
-          newParticles = newParticles.concat(spawnHeartAura(x, y, 16));
+          newParticles = newParticles.concat(spawnHeartAura(x, y, 14));
           break;
       }
       
@@ -731,16 +894,16 @@ export default function App() {
          gemDmg = Math.floor(gemDmg * 1.5);
          newParticles = newParticles.concat(spawnExplosion(x, y, '#eab308', 8)); // gold weakness sparks
       } else if (isResisted && gemDmg > 0) {
-         gemDmg = Math.floor(gemDmg * 0.5);
+         gemDmg = Math.floor(gemDmg * 0.6);
          newParticles = newParticles.concat(spawnExplosion(x, y, '#64748b', 4)); // dim gray resist sparks
       }
 
       let isCrit = false;
       if (gemDmg > 0 && Math.random() * 100 < (totalStats.critChance || 5)) {
         isCrit = true;
-        gemDmg = Math.floor(gemDmg * ((totalStats.critDmg || 150) / 100));
+        gemDmg = Math.floor(gemDmg * ((totalStats.critDmg || 140) / 100));
         playCritSFX();
-        newParticles = newParticles.concat(spawnExplosion(x, y, '#ff0000', 16));
+        newParticles = newParticles.concat(spawnExplosion(x, y, '#ff0000', 14));
       }
       
       if (isCrit && gemDmg > 0) {
@@ -757,15 +920,16 @@ export default function App() {
     setChainCombo(nextChain);
     setChainTimer(MAX_CHAIN_TIMER);
 
-    // Chain damage multiplier: +25% per chain (e.g. 1st match = 1.25x, 2nd = 1.50x, 3rd = 1.75x)
-    const chainMultiplier = 1 + (nextChain * 0.25);
+    // Balanced chain and combo multipliers to ensure relaxing, steady pace
+    const chainMultiplier = 1 + Math.min(0.5, (nextChain - 1) * 0.12);
 
-    let currentMultiplier = comboMultiplier;
+    let matchBonus = 0;
     if (matchedGems.length > 3) {
-      currentMultiplier += (matchedGems.length - 3) * 0.5;
+      matchBonus = Math.min(0.5, (matchedGems.length - 3) * 0.08);
     }
     
-    const totalMultiplier = currentMultiplier * chainMultiplier;
+    const effectiveMultiplier = comboMultiplier + matchBonus;
+    const totalMultiplier = Math.min(2.4, effectiveMultiplier * chainMultiplier);
 
     // Trigger rich elemental match SFX and chain combo audio feedback
     const matchedTypes = matchedGems.map(g => g.type);
@@ -774,6 +938,8 @@ export default function App() {
     dmg = Math.floor(dmg * totalMultiplier);
     heal = Math.floor(heal * totalMultiplier);
 
+    let nextGameState = { ...currentGameState };
+
     // Apply Vampiric Passive if available
     const vampirePassive = totalStats.passives.find(p => p.type === 'vampire');
     if (vampirePassive && dmg > 0) {
@@ -781,8 +947,12 @@ export default function App() {
       heal += vHeal;
     }
 
-    // Apply Turn-Based Passives (Regeneration & Flame Burn) on player move/turn
+    // Apply Turn-Based Passives and Step Charge on player move/turn (50 steps to charge Relic Nova)
     if (nextChain === 1) {
+      const updatedSteps = Math.min(50, (currentGameState.relicSteps || 0) + 1);
+      nextGameState.relicSteps = updatedSteps;
+      nextGameState.relicBurstCharge = Math.min(100, Math.floor((updatedSteps / 50) * 100));
+
       totalStats.passives.forEach(p => {
         if (p.type === 'slowHeal' && p.value > 0) {
           heal += p.value;
@@ -799,8 +969,8 @@ export default function App() {
     
     if (nextChain > 1) {
       addDamageNumber(`${nextChain}x CHAIN! (${totalMultiplier.toFixed(1)}x DMG)`, 'combo', window.innerWidth / 2, 120);
-    } else if (currentMultiplier > 1) {
-      addDamageNumber(`Combo x${currentMultiplier.toFixed(1)}`, 'combo', window.innerWidth / 2, 120);
+    } else if (effectiveMultiplier > 1) {
+      addDamageNumber(`Combo x${effectiveMultiplier.toFixed(1)}`, 'combo', window.innerWidth / 2, 120);
     }
 
     if (dmg > 0) {
@@ -810,7 +980,55 @@ export default function App() {
     }
     if (heal > 0) addDamageNumber(heal, 'heal', 50, 80);
 
-    let nextGameState = { ...currentGameState };
+    // --- CHECK & PROCESS RUNE SEAL HITS (Translucent Block Barriers) ---
+    const blastCoords = currentGems.filter(g => finalMatchedIds.has(g.id)).map(g => ({ row: g.row, col: g.col }));
+    const { remainingSeals, shatteredSeals, crackedSeals } = checkRuneSealHits(
+      currentGameState.runeSeals || [],
+      matchedGems,
+      blastCoords
+    );
+
+    if (crackedSeals.length > 0) {
+      playRuneCrackSFX();
+      crackedSeals.forEach(s => {
+        const x = gridRect ? gridRect.left + s.col * GEM_SIZE + GEM_SIZE / 2 : window.innerWidth / 2;
+        const y = gridRect ? gridRect.top + s.row * GEM_SIZE + GEM_SIZE / 2 : window.innerHeight / 2;
+        newParticles = newParticles.concat(spawnExplosion(x, y, '#67e8f9', 12));
+        addDamageNumber('⚡ RUNE CRACKED!', 'crit', x, y - 18);
+      });
+    }
+
+    if (shatteredSeals.length > 0) {
+      playRuneShatterSFX();
+      shatteredSeals.forEach(s => {
+        const x = gridRect ? gridRect.left + s.col * GEM_SIZE + GEM_SIZE / 2 : window.innerWidth / 2;
+        const y = gridRect ? gridRect.top + s.row * GEM_SIZE + GEM_SIZE / 2 : window.innerHeight / 2;
+        
+        const burstColor = s.type === 'dragon' ? '#f97316' : s.type === 'frost' ? '#06b6d4' : s.type === 'relic' ? '#eab308' : '#c084fc';
+        newParticles = newParticles.concat(spawnExplosion(x, y, burstColor, 28));
+        
+        const runeBurstDmg = Math.floor((45 + ((currentGameState.chapter || 1) * 12)) * totalMultiplier);
+        dmg += runeBurstDmg;
+        addDamageNumber(`💥 RUNE SHATTER! +${runeBurstDmg}`, 'combo', x, y - 25);
+        
+        nextGameState.gold = (nextGameState.gold || 0) + 4;
+        nextGameState.cleansedSealsCount = (nextGameState.cleansedSealsCount || 0) + 1;
+      });
+
+      // If ALL seals are shattered -> UNLOCK ANCIENT RUNE VAULT!
+      if (remainingSeals.length === 0 && (currentGameState.totalSealsInStage || 0) > 0) {
+        playRuneVaultUnlockedSFX();
+        const vaultDmg = Math.floor((150 + ((currentGameState.chapter || 1) * 35)) * totalMultiplier);
+        dmg += vaultDmg;
+        nextGameState.gold = (nextGameState.gold || 0) + 25;
+        nextGameState.bossStunTimer = Math.max(nextGameState.bossStunTimer || 0, 3);
+        addDamageNumber(`🌟 RUNE VAULT UNLOCKED! +${vaultDmg} DAMAGE!`, 'combo', window.innerWidth / 2, window.innerHeight * 0.35);
+        newParticles = newParticles.concat(spawnExplosion(window.innerWidth / 2, window.innerHeight * 0.35, '#fbbf24', 45));
+      }
+    }
+
+    nextGameState.runeSeals = remainingSeals;
+
     if (matchedGems.length >= 5) {
       nextGameState.bossStunTimer = 3;
       addDamageNumber('STAGGERED!', 'combo', window.innerWidth / 2, window.innerHeight / 2 - 50);
@@ -819,6 +1037,9 @@ export default function App() {
     if (dmg > 0) {
       nextGameState.enemyHp -= dmg;
       if (nextGameState.enemyHp <= 0) {
+        // Visual death
+        nextGameState.enemyHp = 0;
+
         const enemyInfo = getEnemyInfo(nextGameState.enemyType);
         const isBossEnemy = enemyInfo.isBoss || nextGameState.currentLayer === nextGameState.mapNodes.length - 1;
 
@@ -828,6 +1049,28 @@ export default function App() {
           : (12 + nextGameState.level * 5 + Math.floor(Math.random() * 6));
         nextGameState.gold += goldEarned;
         addDamageNumber(`+${goldEarned} Gold!`, 'heal', window.innerWidth / 2, 120);
+
+        // Equipment drop rate: 30% for minions, 100% for bosses
+        let droppedItem: Equipment | null = null;
+        const dropChance = isBossEnemy ? 1.0 : 0.30;
+        if (Math.random() < dropChance) {
+          const ownedNames = getOwnedItemNames(nextGameState);
+          const newEq = generateRandomEquipment(nextGameState.level, undefined, isBossEnemy, ownedNames);
+          
+          // Add to player's inventory bag ONLY - DO NOT auto-equip
+          nextGameState.inventory = [...(nextGameState.inventory || []), newEq];
+          droppedItem = newEq;
+          addDamageNumber(`LOOT: ${newEq.name}!`, 'combo', window.innerWidth / 2, 180);
+        }
+
+        // Set state to render 0 HP and trigger drop visuals
+        setGameState({ ...nextGameState });
+
+        // Trigger loot drop animations (coins + item flying to bag)
+        spawnLootDropEffects(goldEarned, droppedItem);
+
+        // Wait 1.3s so player can watch the loot fly into the bag and gold counter
+        await sleep(1300);
 
         // Advance layer
         nextGameState.currentLayer += 1;
@@ -853,29 +1096,6 @@ export default function App() {
         } else {
           nextGameState.status = 'map';
           nextGameState.stage = nextGameState.currentLayer + 1;
-
-          // Equipment drop rate: 30% for minions, 100% for bosses
-          const dropChance = isBossEnemy ? 1.0 : 0.30;
-          if (Math.random() < dropChance) {
-            const ownedNames = getOwnedItemNames(nextGameState);
-            const newEq = generateRandomEquipment(nextGameState.level, undefined, isBossEnemy, ownedNames);
-            
-            // Add to player's inventory bag
-            nextGameState.inventory = [...(nextGameState.inventory || []), newEq];
-
-            // If slot is empty, auto-equip it as a convenience
-            if (!nextGameState.equipment[newEq.slot]) {
-              nextGameState.equipment = {
-                ...nextGameState.equipment,
-                [newEq.slot]: newEq,
-              };
-              const updatedStats = calculateTotalStats(nextGameState.stats, nextGameState.equipment);
-              nextGameState.playerMaxHp = updatedStats.maxHp;
-              nextGameState.playerHp = Math.min(nextGameState.playerMaxHp, nextGameState.playerHp);
-            }
-
-            addDamageNumber(`DROPPED: ${newEq.name}!`, 'combo', window.innerWidth / 2, 180);
-          }
         }
 
         setGameState(nextGameState);
@@ -890,22 +1110,62 @@ export default function App() {
 
     await sleep(MATCH_DELAY);
 
-    const nextGems = [...remainingGems];
+    // Frozen / Rune-Sealed gems DO NOT move during cascades; loose gems cascade around them.
+    const activeSeals = nextGameState.runeSeals || [];
+    const frozenPosKeys = new Set(activeSeals.filter(s => s.hp > 0).map(s => `${s.row},${s.col}`));
+
+    const nextGems: Gem[] = [];
     for (let c = 0; c < COLS; c++) {
-      const colGems = nextGems.filter(g => g.col === c).sort((a, b) => b.row - a.row);
-      let targetRow = ROWS - 1;
-      for (const g of colGems) {
-        g.row = targetRow;
-        targetRow--;
+      const columnRemaining = remainingGems.filter(g => g.col === c);
+      
+      const lockedGems: Gem[] = [];
+      const looseGems: Gem[] = [];
+      const lockedRows = new Set<number>();
+
+      columnRemaining.forEach(g => {
+        if (frozenPosKeys.has(`${g.row},${c}`)) {
+          lockedGems.push(g);
+          lockedRows.add(g.row);
+        } else {
+          looseGems.push(g);
+        }
+      });
+
+      // Sort loose gems by row descending (bottom to top)
+      looseGems.sort((a, b) => b.row - a.row);
+
+      // Available non-frozen rows in this column from bottom (ROWS - 1) to top (0)
+      const availableRows: number[] = [];
+      for (let r = ROWS - 1; r >= 0; r--) {
+        if (!lockedRows.has(r)) {
+          availableRows.push(r);
+        }
       }
-      for (let r = targetRow; r >= 0; r--) {
-        nextGems.push(createRandomGem(r, c));
+
+      // Add back locked gems at their stationary frozen coordinates
+      lockedGems.forEach(g => {
+        nextGems.push(g);
+      });
+
+      // Drop loose gems into open available rows from bottom up
+      let looseIdx = 0;
+      while (looseIdx < looseGems.length && looseIdx < availableRows.length) {
+        const gem = looseGems[looseIdx];
+        gem.row = availableRows[looseIdx];
+        nextGems.push(gem);
+        looseIdx++;
+      }
+
+      // Spawn fresh falling gems for any remaining empty rows above
+      for (let i = looseIdx; i < availableRows.length; i++) {
+        const newRow = availableRows[i];
+        nextGems.push(createRandomGem(newRow, c));
       }
     }
     setGems(nextGems);
     await sleep(DROP_DELAY);
     
-    processMatches(nextGems, nextGameState, currentMultiplier + 0.5);
+    processMatches(nextGems, nextGameState, comboMultiplier + 0.1);
   };
 
   // --- Swipe/drag-to-swap support -------------------------------------------------
@@ -925,6 +1185,16 @@ export default function App() {
   // and drag-to-swap input paths so the two input methods can never diverge
   // in behavior.
   const swapGems = async (gemA: Gem, gemB: Gem) => {
+    // If either gem is locked inside an iced rune seal, it cannot move!
+    if (isCellFrozen(gemA.row, gemA.col, gameState.runeSeals)) {
+      triggerFrozenFeedback(gemA.row, gemA.col);
+      return;
+    }
+    if (isCellFrozen(gemB.row, gemB.col, gameState.runeSeals)) {
+      triggerFrozenFeedback(gemB.row, gemB.col);
+      return;
+    }
+
     setIsProcessing(true);
 
     lastSwappedPosRef.current = { row: gemB.row, col: gemB.col };
@@ -939,7 +1209,10 @@ export default function App() {
     await sleep(MATCH_DELAY);
 
     const matchedIds = findMatches(swappedGems);
-    const isSpecialCombo = (gemA.special && gemB.special) || gemA.special === 'rainbow' || gemB.special === 'rainbow';
+    const isSpecialCombo = Boolean(
+      (gemA.special && gemB.special) ||
+      gemA.special === 'rainbow' || gemB.special === 'rainbow'
+    );
     
     if (matchedIds.size > 0 || isSpecialCombo) {
       setGameState(prev => ({ ...prev, wrongSwipes: 0 }));
@@ -993,6 +1266,13 @@ export default function App() {
     // afterward so we don't double-trigger a second, unwanted selection.
     if (suppressNextClickRef.current) return;
 
+    // If the clicked gem is frozen by a RuneSeal, it cannot be selected or moved!
+    if (isCellFrozen(gem.row, gem.col, gameState.runeSeals)) {
+      triggerFrozenFeedback(gem.row, gem.col);
+      setSelectedGemId(null);
+      return;
+    }
+
     if (!selectedGemId) {
       setSelectedGemId(gem.id);
       playSwapSFX();
@@ -1011,12 +1291,23 @@ export default function App() {
       return;
     }
 
+    // If the target adjacent gem is frozen, player cannot swap into it!
+    if (isCellFrozen(gem.row, gem.col, gameState.runeSeals)) {
+      triggerFrozenFeedback(gem.row, gem.col);
+      setSelectedGemId(null);
+      return;
+    }
+
     setSelectedGemId(null);
     swapGems(selectedGem, gem);
   };
 
   const handleGemPanStart = (gem: Gem) => {
     if (isProcessing || gameState.status !== 'playing') return;
+    if (isCellFrozen(gem.row, gem.col, gameState.runeSeals)) {
+      triggerFrozenFeedback(gem.row, gem.col);
+      return;
+    }
     dragOriginGemRef.current = gem;
     dragInProgressRef.current = false;
   };
@@ -1040,6 +1331,14 @@ export default function App() {
     const targetCol = origin.col + dCol;
     if (targetRow < 0 || targetRow >= ROWS || targetCol < 0 || targetCol >= COLS) return;
 
+    // If target destination is frozen, block move and give feedback
+    if (isCellFrozen(targetRow, targetCol, gameState.runeSeals)) {
+      dragInProgressRef.current = true;
+      suppressNextClickRef.current = true;
+      triggerFrozenFeedback(targetRow, targetCol);
+      return;
+    }
+
     const targetGem = gems.find(g => g.row === targetRow && g.col === targetCol);
     if (!targetGem) return;
 
@@ -1057,8 +1356,69 @@ export default function App() {
     setTimeout(() => { suppressNextClickRef.current = false; }, 100);
   };
 
+  const triggerRelicNova = () => {
+    if (((gameState.relicBurstCharge || 0) < 100 && (gameState.relicSteps || 0) < 50) || isProcessing || gameState.status !== 'playing') return;
+    
+    setIsProcessing(true);
+    playRelicBurstSFX();
+
+    // 1. Deal 90 + Chapter scaling Relic Nova damage to enemy
+    const novaDmg = 90 + ((gameState.chapter || 1) * 20);
+    addDamageNumber(`⚡ RELIC NOVA UNLEASHED! +${novaDmg}`, 'combo', window.innerWidth / 2, window.innerHeight * 0.35);
+    setEnemyHit(true);
+    setTimeout(() => setEnemyHit(false), 400);
+
+    // 2. Damage all active rune seals by 1 HP!
+    const currentSeals = gameState.runeSeals || [];
+    const remainingSeals: RuneSeal[] = [];
+    const shatteredSeals: RuneSeal[] = [];
+    let runeDmgBonus = 0;
+
+    currentSeals.forEach(s => {
+      const nextHp = s.hp - 1;
+      if (nextHp <= 0) {
+        shatteredSeals.push({ ...s, hp: 0 });
+      } else {
+        remainingSeals.push({ ...s, hp: nextHp });
+      }
+    });
+
+    if (shatteredSeals.length > 0) {
+      playRuneShatterSFX();
+      runeDmgBonus = shatteredSeals.length * (45 + ((gameState.chapter || 1) * 12));
+    }
+
+    // 3. Transform 1 random non-special gem into a bomb gem
+    setGems(prevGems => {
+      const next = [...prevGems];
+      const available = next.filter(g => !g.special);
+      if (available.length > 0) {
+        const chosen = available[Math.floor(Math.random() * available.length)];
+        const targetIdx = next.findIndex(item => item.id === chosen.id);
+        if (targetIdx >= 0) {
+          next[targetIdx] = { ...next[targetIdx], special: 'bomb_3x3' };
+        }
+      }
+      return next;
+    });
+
+    setGameState(prev => ({
+      ...prev,
+      relicBurstCharge: 0,
+      relicSteps: 0,
+      runeSeals: remainingSeals,
+      cleansedSealsCount: (prev.cleansedSealsCount || 0) + shatteredSeals.length,
+      enemyHp: Math.max(0, prev.enemyHp - (novaDmg + runeDmgBonus)),
+      gold: prev.gold + (shatteredSeals.length * 4),
+    }));
+
+    setTimeout(() => {
+      setIsProcessing(false);
+    }, 450);
+  };
+
   useEffect(() => {
-    if (gameState.status !== 'playing') return;
+    if (gameState.status !== 'playing' || isGameFrozen) return;
     const interval = setInterval(() => {
       const current = gameStateRef.current;
       if (current.timer <= 1) {
@@ -1090,15 +1450,12 @@ export default function App() {
            } else if (current.enemyType === 'elf') {
              addDamageNumber(30, 'heal', window.innerWidth / 2, 200);
            } else if (current.enemyType === 'golem') {
-             const dmg = Math.max(1, 20 - Math.floor(calculateTotalStats(current.stats, current.equipment).defense * 0.5));
+             const dmg = isGodMode ? 0 : Math.max(1, 20 - Math.floor(calculateTotalStats(current.stats, current.equipment).defense * 0.5));
              addDamageNumber(dmg, 'enemyAttack', window.innerWidth / 2, 80);
              setPlayerHit(true);
              setTimeout(() => setPlayerHit(false), 300);
            } else {
-             // Minions (goblin/slime/imp/skeleton) don't have a unique gimmick like the
-             // bosses do, but their ability countdown still fires an attack — make sure
-             // it actually deals damage instead of silently doing nothing.
-             const dmg = Math.max(1, (10 + current.level * 3) - Math.floor(calculateTotalStats(current.stats, current.equipment).defense * 0.5));
+             const dmg = isGodMode ? 0 : Math.max(1, (10 + current.level * 3) - Math.floor(calculateTotalStats(current.stats, current.equipment).defense * 0.5));
              addDamageNumber(dmg, 'enemyAttack', window.innerWidth / 2, 80);
              setPlayerHit(true);
              setTimeout(() => setPlayerHit(false), 300);
@@ -1106,18 +1463,25 @@ export default function App() {
            
            setGameState(prev => {
               let nextState = { ...prev, timer: prev.timer - 1, bossAbilityCooldown: 15, bossStunTimer: nextStunTimer };
+              if (isGodMode) {
+                nextState.playerHp = calculateTotalStats(prev.stats, prev.equipment).maxHp;
+              }
               if (prev.enemyType === 'dragon') {
                 nextState.timer = Math.max(0, nextState.timer - 10);
               } else if (prev.enemyType === 'elf') {
                 nextState.enemyHp = Math.min(nextState.enemyMaxHp, nextState.enemyHp + 30);
               } else if (prev.enemyType === 'golem') {
-                const dmg = Math.max(1, 20 - Math.floor(calculateTotalStats(prev.stats, prev.equipment).defense * 0.5));
-                nextState.playerHp -= dmg;
-                if (nextState.playerHp <= 0) nextState.status = 'gameover';
+                if (!isGodMode) {
+                  const dmg = Math.max(1, 20 - Math.floor(calculateTotalStats(prev.stats, prev.equipment).defense * 0.5));
+                  nextState.playerHp -= dmg;
+                  if (nextState.playerHp <= 0) nextState.status = 'gameover';
+                }
               } else {
-                const dmg = Math.max(1, (10 + prev.level * 3) - Math.floor(calculateTotalStats(prev.stats, prev.equipment).defense * 0.5));
-                nextState.playerHp -= dmg;
-                if (nextState.playerHp <= 0) nextState.status = 'gameover';
+                if (!isGodMode) {
+                  const dmg = Math.max(1, (10 + prev.level * 3) - Math.floor(calculateTotalStats(prev.stats, prev.equipment).defense * 0.5));
+                  nextState.playerHp -= dmg;
+                  if (nextState.playerHp <= 0) nextState.status = 'gameover';
+                }
               }
               return nextState;
            });
@@ -1134,7 +1498,7 @@ export default function App() {
       }
     }, 1000);
     return () => clearInterval(interval);
-  }, [gameState.status]);
+  }, [gameState.status, isGameFrozen, isGodMode]);
 
   // Continuous elemental aura particle effect while boss is stunned/staggered/vulnerable
   useEffect(() => {
@@ -1178,8 +1542,22 @@ export default function App() {
         ? 800 + (chFactor * 250) + (gameState.currentLayer * 120)
         : 280 + (chFactor * 80) + (gameState.currentLayer * 40);
 
-      startBGM();
+      if (isBoss) {
+        startBGM(10); // Track 10: APEX OVERLORD (Intimidating & Menacing Doom Theme)
+        playBossIntroSFX(node.enemyType);
+      } else {
+        const roundTrack = ((gameState.currentLayer % 7) + 1);
+        startBGM(roundTrack);
+        playRoundIntroSFX(gameState.currentLayer + 1, false, node.enemyType);
+      }
       setIsMusicPlaying(true);
+
+      const stageSeals = generateStageRuneSeals(
+        gameState.currentLayer,
+        node.enemyType || 'goblin',
+        isBoss,
+        gameState.chapter || 1
+      );
 
       setGameState(prev => ({
         ...prev,
@@ -1191,6 +1569,9 @@ export default function App() {
         enemyType: node.enemyType || 'goblin',
         bossAbilityCooldown: isBoss ? 15 : 20,
         bossStunTimer: 0,
+        runeSeals: stageSeals,
+        totalSealsInStage: stageSeals.length,
+        cleansedSealsCount: 0,
       }));
       setGems(generateSolvableGrid());
     } else if (node.type === 'rest') {
@@ -1198,8 +1579,8 @@ export default function App() {
       setIsMusicPlaying(false);
       setGameState(prev => ({ ...prev, status: 'rest' }));
     } else if (node.type === 'shop') {
-      stopBGM();
-      setIsMusicPlaying(false);
+      startBGM(8); // Track 8: The Gilded Tankard (Cozy Tavern Theme)
+      setIsMusicPlaying(true);
       const ownedNames = getOwnedItemNames(gameState);
       const items: ShopItem[] = [1, 2, 3].map(() => {
         const eq = generateRandomEquipment((gameState.chapter || 1) + gameState.currentLayer, undefined, false, ownedNames);
@@ -1307,10 +1688,10 @@ export default function App() {
               initial={{ scale: 0, rotate: -20 }}
               animate={{ scale: 1, rotate: 0 }}
               transition={{ duration: 0.6, delay: 0.1, type: "spring" }}
-              className="mb-12 relative w-48 h-48 flex justify-center items-center"
+              className="mb-8 relative w-48 h-48 flex justify-center items-center"
             >
               <div className="absolute inset-0 bg-red-600/40 blur-3xl rounded-full" />
-              <BossModel type={gameState.enemyType} isHit={false} isAttacking={true} />
+              <BossModel type={gameState.enemyType} isHit={false} isAttacking={false} />
             </motion.div>
             
             <motion.h2 
@@ -1413,33 +1794,51 @@ export default function App() {
 
       {/* MENU SCREEN */}
       {gameState.status === 'menu' && (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 z-10 relative">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-slate-950 to-slate-950 -z-10" />
+        <div className="flex-1 flex flex-col items-center justify-center p-8 z-10 relative max-w-md mx-auto w-full">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-amber-900/25 via-slate-950 to-slate-950 -z-10" />
           
-          <div className="mb-8 relative group w-48 h-48 flex justify-center items-center">
-            <div className="absolute inset-0 bg-red-600/30 blur-2xl rounded-full group-hover:bg-red-500/40 transition-all duration-500" />
+          {/* Dragon Boss Preview */}
+          <div className="mb-6 relative group w-52 h-52 flex justify-center items-center">
+            <div className="absolute inset-0 bg-amber-500/20 blur-3xl rounded-full group-hover:bg-amber-500/35 transition-all duration-500" />
             <BossModel type="dragon" isHit={false} isAttacking={false} />
           </div>
           
-          <h1 className="text-4xl font-pixel text-center mb-2 tracking-tighter text-transparent bg-clip-text bg-gradient-to-br from-white via-slate-200 to-slate-500 drop-shadow-[0_4px_10px_rgba(0,0,0,0.8)] leading-tight pt-4">
-            GEM KNIGHT
-          </h1>
-          <p className="text-red-400 mb-12 font-bold tracking-widest uppercase text-xs drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-            Descent into Darkness
-          </p>
+          {/* Game Title */}
+          <div className="text-center mb-8">
+            <h1 className="text-4xl sm:text-5xl font-black font-fantasy tracking-wider text-transparent bg-clip-text bg-gradient-to-b from-amber-100 via-amber-300 to-amber-600 drop-shadow-[0_4px_16px_rgba(245,158,11,0.5)]">
+              GEM KNIGHT
+            </h1>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <span className="h-[1px] w-8 bg-gradient-to-r from-transparent to-amber-500/60" />
+              <p className="text-amber-400/90 font-bold tracking-widest uppercase text-xs">
+                Roguelike Match-3 RPG
+              </p>
+              <span className="h-[1px] w-8 bg-gradient-to-l from-transparent to-amber-500/60" />
+            </div>
+          </div>
           
-          <button 
-            onClick={() => setGameState(prev => ({ ...prev, status: 'characterSelect' }))}
-            className="w-full py-5 bg-gradient-to-r from-red-700/80 to-red-900/80 hover:from-red-600 hover:to-red-800 border border-red-500/50 rounded-2xl font-pixel text-[12px] transition-all flex items-center justify-center gap-3 mb-4 shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transform hover:scale-[1.02]"
-          >
-            <Play fill="currentColor" className="w-5 h-5" /> BEGIN QUEST
-          </button>
-          <button 
-            onClick={() => setGameState(prev => ({ ...prev, status: 'store' }))}
-            className="w-full py-4 backdrop-blur-md bg-white/5 hover:bg-white/10 rounded-2xl font-pixel text-[10px] border border-white/10 transition-colors flex items-center justify-center gap-3 uppercase tracking-widest text-white/60 hover:text-white shadow-md transform hover:scale-[1.01]"
-          >
-            <ShoppingCart className="w-5 h-5" /> Armory
-          </button>
+          {/* Primary Action Buttons */}
+          <div className="w-full flex flex-col gap-3">
+            <button 
+              onClick={() => {
+                audio.playTone(600, 'sine', 0.1, 0.3);
+                setGameState(prev => ({ ...prev, status: 'characterSelect' }));
+              }}
+              className="w-full py-4 px-6 bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 hover:from-amber-400 hover:to-orange-500 border-2 border-amber-300 text-black rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-3 shadow-[0_0_25px_rgba(245,158,11,0.4)] hover:shadow-[0_0_35px_rgba(245,158,11,0.6)] transform hover:scale-[1.02] active:scale-95 cursor-pointer"
+            >
+              <Play fill="currentColor" className="w-5 h-5" /> BEGIN QUEST
+            </button>
+
+            <button 
+              onClick={() => {
+                audio.playTone(520, 'sine', 0.1, 0.2);
+                setGameState(prev => ({ ...prev, status: 'store' }));
+              }}
+              className="w-full py-3.5 px-6 backdrop-blur-md bg-slate-900/80 hover:bg-slate-800/90 border border-amber-500/40 rounded-2xl font-bold text-xs uppercase tracking-wider text-amber-200 hover:text-white transition-all flex items-center justify-center gap-2.5 shadow-md transform hover:scale-[1.01] active:scale-95 cursor-pointer"
+            >
+              <ShoppingCart className="w-4 h-4 text-amber-400" /> Merchant Armory
+            </button>
+          </div>
         </div>
       )}
 
@@ -1628,13 +2027,17 @@ export default function App() {
                      key={slot}
                      onClick={() => setIsInventoryOpen(true)}
                      className={cn(
-                       "w-11 h-11 rounded-2xl border flex items-center justify-center text-xl relative transition-transform hover:scale-105 active:scale-95",
+                       "w-11 h-11 rounded-2xl border flex items-center justify-center relative transition-transform hover:scale-105 active:scale-95",
                        eq ? getRarityColor(eq.rarity) : "bg-slate-900/50 border-slate-700/50 text-slate-600"
                      )}
                    >
-                     {eq ? eq.icon : (slot === 'head' ? '🪖' : slot === 'body' ? '👕' : '🗡️')}
+                     {eq ? (
+                       <ItemSprite item={eq} size="sm" />
+                     ) : (
+                       <span className="text-xl">{slot === 'head' ? '🪖' : slot === 'body' ? '👕' : '🗡️'}</span>
+                     )}
                      {eq && eq.passive && (
-                       <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-400 rounded-full border border-black flex items-center justify-center text-[8px] text-black font-extrabold">✨</span>
+                       <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-amber-400 rounded-full border border-black flex items-center justify-center text-[8px] text-black font-extrabold z-10">✨</span>
                      )}
                    </button>
                  );
@@ -1853,10 +2256,29 @@ export default function App() {
                     />
                  </div>
               </div>
-              <div className="flex items-center gap-2">
-                 <button 
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                 {/* Combat Gold Counter */}
+                 <div 
+                   id="combat-gold-counter"
+                   className={cn(
+                     "flex items-center gap-1 text-xs bg-slate-900/90 border border-amber-500/40 text-amber-300 font-extrabold px-2 py-0.5 rounded-lg shadow-sm transition-all duration-200",
+                     goldBumping ? "scale-125 bg-amber-950/80 border-amber-300 text-yellow-200 shadow-[0_0_15px_rgba(245,158,11,0.8)]" : ""
+                   )}
+                 >
+                   <span>🪙</span>
+                   <span>{gameState.gold}G</span>
+                 </div>
+
+                 {/* Combat Bag Button with Inventory & Equipment */}
+                 <motion.button 
+                   id="combat-bag-button"
                    onClick={() => setIsInventoryOpen(true)}
-                   className="flex items-center gap-1.5 text-xs bg-slate-900/80 hover:bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-lg transition-transform active:scale-95"
+                   animate={bagBumping ? { scale: [1, 1.3, 0.95, 1.15, 1], rotate: [0, -8, 8, -4, 0] } : { scale: 1 }}
+                   transition={{ duration: 0.45 }}
+                   className={cn(
+                     "flex items-center gap-1.5 text-xs bg-slate-900/80 hover:bg-slate-800 border px-2 py-0.5 rounded-lg transition-all active:scale-95",
+                     bagBumping ? "border-amber-400 bg-amber-950/60 shadow-[0_0_20px_rgba(245,158,11,0.8)] text-amber-200" : "border-slate-700 text-slate-200"
+                   )}
                    title="Open Equipment & Inventory"
                  >
                    {gameState.equipment.head ? <span>{gameState.equipment.head.icon}</span> : <span className="opacity-40">🪖</span>}
@@ -1865,23 +2287,64 @@ export default function App() {
                    <span className="text-amber-400 font-extrabold flex items-center gap-0.5 ml-1 text-[10px]">
                      <Package className="w-3 h-3" /> {gameState.inventory.length}
                    </span>
-                 </button>
+                 </motion.button>
+
+                 {/* 10-Track Music Switcher Pill */}
+                 <div className="flex items-center gap-0.5 bg-slate-900/90 border border-slate-700 px-1.5 py-0.5 rounded-lg text-[10px]">
+                   <button
+                     onClick={() => {
+                       const trk = prevTrack();
+                       if (!isMusicPlaying) {
+                         startBGM(trk.id);
+                         setIsMusicPlaying(true);
+                       }
+                     }}
+                     className="text-slate-400 hover:text-amber-300 p-0.5"
+                     title="Previous Track"
+                   >
+                     <ChevronLeft className="w-3 h-3" />
+                   </button>
+
+                   <button
+                     onClick={() => {
+                       const active = toggleBGM();
+                       setIsMusicPlaying(active);
+                     }}
+                     className="flex items-center gap-1 text-amber-300 font-pixel font-bold max-w-[95px] sm:max-w-[125px] truncate px-0.5"
+                     title="Toggle Music Playback"
+                   >
+                     <Music className={cn("w-3 h-3 shrink-0", isMusicPlaying ? "text-amber-400 animate-pulse" : "text-slate-500")} />
+                     <span className="truncate">{currentTrack.id}: {currentTrack.name}</span>
+                   </button>
+
+                   <button
+                     onClick={() => {
+                       const trk = nextTrack();
+                       if (!isMusicPlaying) {
+                         startBGM(trk.id);
+                         setIsMusicPlaying(true);
+                       }
+                     }}
+                     className="text-slate-400 hover:text-amber-300 p-0.5"
+                     title="Next Track"
+                   >
+                     <ChevronRight className="w-3 h-3" />
+                   </button>
+                 </div>
 
                  <button
                    onClick={() => {
-                     const active = toggleBGM();
-                     setIsMusicPlaying(active);
+                     toggleMute();
                    }}
                    className={cn(
-                     "flex items-center gap-1 text-[10px] font-pixel border px-2 py-0.5 rounded-lg transition-all active:scale-95",
-                     isMusicPlaying 
-                       ? "bg-amber-950/80 border-amber-500/60 text-amber-300 shadow-[0_0_8px_rgba(245,158,11,0.5)]" 
-                       : "bg-slate-900/80 border-slate-700 text-slate-400"
+                     "flex items-center justify-center w-6 h-6 rounded-lg border text-[10px] transition-all active:scale-95",
+                     isMuted 
+                       ? "bg-red-950/80 border-red-500/60 text-red-400"
+                       : "bg-slate-900/80 border-slate-700 text-amber-400"
                    )}
-                   title="Toggle Encounter Music"
+                   title={isMuted ? "Unmute Audio" : "Mute Audio"}
                  >
-                   {isMusicPlaying ? <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" /> : <VolumeX className="w-3 h-3 text-slate-500" />}
-                   <span>{isMusicPlaying ? 'BGM ON' : 'BGM OFF'}</span>
+                   {isMuted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
                  </button>
 
                  <button
@@ -1942,9 +2405,10 @@ export default function App() {
                 </span>
               </div>
               
-              {/* Boss/Enemy Sprite Frame - Cleanly contained without clipping lines */}
-              <div className="w-full h-[135px] flex items-center justify-center relative my-0.5 rounded-2xl bg-slate-950/60 border border-white/10 shadow-inner overflow-hidden">
-                 <div className="flex items-center justify-center pointer-events-none w-full h-full scale-100">
+              {/* Boss/Enemy Sprite Frame - Cleanly contained with atmospheric dungeon arena backdrop */}
+              <div className="w-full h-[148px] flex items-center justify-center relative my-0.5 rounded-2xl bg-gradient-to-b from-slate-900/90 via-slate-950 to-slate-900/90 border border-amber-500/20 shadow-[inset_0_4px_16px_rgba(0,0,0,0.85)] overflow-hidden">
+                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(245,158,11,0.08)_0%,transparent_70%)] pointer-events-none" />
+                 <div className="flex items-center justify-center pointer-events-none w-full h-full">
                    <BossModel 
                      type={gameState.enemyType} 
                      isHit={enemyHit} 
@@ -2132,6 +2596,57 @@ export default function App() {
             </AnimatePresence>
           </div>
 
+          {/* RUNIC BARRIER & RELIC NOVA STATUS HEADER */}
+          <div className="w-full max-w-[340px] mx-auto flex items-center justify-between gap-2 px-2.5 py-1 bg-slate-950/85 border border-cyan-500/40 rounded-xl my-0.5 shadow-lg backdrop-blur-md z-30">
+            {/* Seals Cleansed Counter (if seals exist in stage) */}
+            {gameState.totalSealsInStage > 0 ? (
+              <div className="flex items-center gap-1.5 text-[10px] font-pixel font-bold text-cyan-300 min-w-0">
+                <span className="text-sm">🔮</span>
+                <span className="tracking-wider">SEALS:</span>
+                <span className="text-white font-mono font-black bg-cyan-950/90 border border-cyan-400/50 px-1.5 py-0.2 rounded shadow-inner">
+                  {(gameState.totalSealsInStage - (gameState.runeSeals?.length || 0))}/{gameState.totalSealsInStage}
+                </span>
+                {gameState.runeSeals?.length === 0 && (
+                  <span className="text-yellow-300 text-[8px] font-black animate-pulse ml-0.5">UNLOCKED!</span>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-[9px] font-pixel text-amber-300/80">
+                <span>⚡</span>
+                <span className="tracking-wider">RELIC POWER</span>
+              </div>
+            )}
+
+            {/* Relic Burst Power Meter / Button (Charges over 50 steps across stages) */}
+            <div className="flex items-center gap-1.5 ml-auto">
+              <button
+                onClick={triggerRelicNova}
+                disabled={(gameState.relicBurstCharge || 0) < 100 || isProcessing}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg font-pixel text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all duration-200 shadow-md",
+                  (gameState.relicBurstCharge || 0) >= 100
+                    ? "bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-600 text-slate-950 border-2 border-yellow-200 animate-bounce shadow-[0_0_15px_rgba(234,179,8,0.8)] cursor-pointer"
+                    : "bg-slate-900/90 text-slate-400 border border-slate-700/60 cursor-not-allowed opacity-90"
+                )}
+              >
+                <span className="text-xs">⚡</span>
+                {(gameState.relicBurstCharge || 0) >= 100 ? (
+                  <span className="text-slate-950 font-black">RELIC NOVA!</span>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <span>NOVA [{gameState.relicSteps || 0}/50]</span>
+                    <div className="w-10 h-1.5 bg-black/60 rounded-full border border-amber-500/30 overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(100, gameState.relicBurstCharge || 0)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </button>
+            </div>
+          </div>
+
           {/* 3D TACTILE PUZZLE BOARD CONTAINER WITH DYNAMIC CHAPTER THEME */}
           {(() => {
             const chapterNum = gameState.chapter || 1;
@@ -2169,15 +2684,32 @@ export default function App() {
                       ))}
                     </div>
 
+                    {/* Active Arcane Rune Seals (Translucent block barriers covering tiles with gems visible underneath) */}
+                    <AnimatePresence>
+                      {gameState.runeSeals && gameState.runeSeals.map(seal => (
+                        <RuneSealTile 
+                          key={seal.id} 
+                          seal={seal} 
+                          gemSize={GEM_SIZE} 
+                          isShaking={shakingSealId === seal.id}
+                        />
+                      ))}
+                    </AnimatePresence>
+
                 <AnimatePresence>
-                  {gems.map(gem => (
+                  {gems.map(gem => {
+                    const isFrozen = isCellFrozen(gem.row, gem.col, gameState.runeSeals);
+                    return (
                     <motion.div
                       key={gem.id}
                       initial={{ opacity: 0, y: gem.row * GEM_SIZE - 200 }}
                       animate={{ opacity: 1, x: gem.col * GEM_SIZE, y: gem.row * GEM_SIZE }}
                       exit={{ opacity: 0, scale: 0.5 }}
                       transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-                      className="absolute p-[2px] cursor-pointer touch-none"
+                      className={cn(
+                        "absolute p-[2px] touch-none",
+                        isFrozen ? "cursor-not-allowed select-none" : "cursor-pointer"
+                      )}
                       style={{ width: GEM_SIZE, height: GEM_SIZE }}
                       onClick={() => handleGemClick(gem)}
                       onPanStart={() => handleGemPanStart(gem)}
@@ -2223,13 +2755,90 @@ export default function App() {
                         />
                       </div>
                     </motion.div>
-                  ))}
+                    );
+                  })}
                 </AnimatePresence>
               </div>
             </div>
           </div>
         );
       })()}
+
+      {/* FLYING GOLD COINS TO TOP-BAR */}
+      <AnimatePresence>
+        {flyingCoins.map(coin => (
+          <motion.div
+            key={coin.id}
+            initial={{ x: coin.startX, y: coin.startY, scale: 0.5, opacity: 0 }}
+            animate={{
+              x: [coin.startX, (coin.startX + coin.targetX) / 2 + (Math.random() - 0.5) * 60, coin.targetX],
+              y: [coin.startY, Math.min(coin.startY, coin.targetY) - 50, coin.targetY],
+              scale: [0.6, 1.4, 0.9],
+              opacity: [0, 1, 1],
+            }}
+            exit={{ scale: 0, opacity: 0 }}
+            transition={{ duration: 0.65, delay: coin.delay, ease: 'easeInOut' }}
+            className="fixed z-50 pointer-events-none drop-shadow-[0_0_10px_rgba(234,179,8,0.9)]"
+            style={{ left: 0, top: 0 }}
+          >
+            <span className="text-xl">🪙</span>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+
+      {/* FLYING ITEM DROP INTO BAG */}
+      <AnimatePresence>
+        {flyingItemDrop && (
+          <motion.div
+            key={flyingItemDrop.id}
+            initial={{ x: flyingItemDrop.startX - 30, y: flyingItemDrop.startY - 30, scale: 0.2, opacity: 0 }}
+            animate={{
+              x: [
+                flyingItemDrop.startX - 30,
+                flyingItemDrop.startX - 30,
+                flyingItemDrop.targetX - 20
+              ],
+              y: [
+                flyingItemDrop.startY - 30,
+                flyingItemDrop.startY - 80,
+                flyingItemDrop.targetY - 20
+              ],
+              scale: [0.3, 1.3, 0.35],
+              opacity: [0, 1, 1],
+              rotate: [0, -12, 12, 0]
+            }}
+            exit={{ scale: 0, opacity: 0 }}
+            transition={{ duration: 0.85, ease: 'easeInOut' }}
+            className="fixed z-50 pointer-events-none"
+            style={{ left: 0, top: 0 }}
+          >
+            <div className={cn("p-2 rounded-2xl border bg-slate-900/90 shadow-2xl flex items-center justify-center", getRarityColor(flyingItemDrop.item.rarity))}>
+              <ItemSprite item={flyingItemDrop.item} size="md" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ITEM DROP TOAST POPUP */}
+      <AnimatePresence>
+        {lootToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 30, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.9 }}
+            transition={{ duration: 0.3 }}
+            className="fixed top-20 inset-x-0 z-50 flex justify-center pointer-events-none px-4"
+          >
+            <div className="bg-slate-900/95 border-2 border-amber-400/80 rounded-2xl px-4 py-2.5 shadow-[0_0_25px_rgba(245,158,11,0.5)] flex items-center gap-3">
+              <span className="text-2xl">{lootToast.icon}</span>
+              <div>
+                <div className="text-[10px] text-amber-300 font-bold uppercase tracking-wider">Item Collected in Bag!</div>
+                <div className="text-sm font-extrabold text-white">{lootToast.name}</div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
       )}
 
@@ -2257,9 +2866,7 @@ export default function App() {
                 <XCircle className="w-6 h-6" />
               </button>
 
-              <div className="w-20 h-20 rounded-2xl bg-black/50 border border-white/20 flex items-center justify-center text-5xl mb-4 shadow-inner">
-                {selectedEqModal.icon}
-              </div>
+              <ItemSprite item={selectedEqModal} size="xl" className="mb-4" />
 
               <span className={cn("text-xs font-black px-2.5 py-0.5 rounded-full border uppercase tracking-wider mb-2", getRarityBadge(selectedEqModal.rarity))}>
                 {selectedEqModal.rarity} {selectedEqModal.slot}
@@ -2313,6 +2920,56 @@ export default function App() {
       <QuestTipsModal
         isOpen={isTipsOpen}
         onClose={() => setIsTipsOpen(false)}
+      />
+
+      {/* FLOATING DEV DEBUG LAUNCHER & REAL-TIME STATUS BADGES */}
+      <div className="fixed top-2.5 right-2.5 z-40 flex items-center gap-1.5 pointer-events-auto">
+        {isGameFrozen && (
+          <div className="bg-cyan-950/90 border border-cyan-400/80 text-cyan-300 font-bold text-[10px] px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(6,182,212,0.6)] animate-pulse flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+            <span>FROZEN</span>
+          </div>
+        )}
+        {isGodMode && (
+          <div className="bg-emerald-950/90 border border-emerald-400/80 text-emerald-300 font-bold text-[10px] px-2 py-0.5 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.6)] flex items-center gap-1">
+            <Shield className="w-2.5 h-2.5 fill-current" />
+            <span>GOD</span>
+          </div>
+        )}
+        <button
+          id="dev-debug-floating-trigger"
+          onClick={() => setIsDevMenuOpen(true)}
+          className="bg-slate-900/90 hover:bg-amber-950/90 text-amber-300 hover:text-amber-200 border border-amber-500/40 hover:border-amber-400 font-extrabold text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-xl shadow-lg flex items-center gap-1.5 transition-all backdrop-blur-md active:scale-95 group"
+          title="Open Developer Debug Suite (~ / F2)"
+        >
+          <span className="text-xs group-hover:rotate-45 transition-transform duration-200">🛠️</span>
+          <span className="font-pixel text-[9px]">DEV</span>
+        </button>
+      </div>
+
+      <DevDebugModal
+        isOpen={isDevMenuOpen}
+        onClose={() => setIsDevMenuOpen(false)}
+        gameState={gameState}
+        setGameState={setGameState}
+        isGameFrozen={isGameFrozen}
+        setIsGameFrozen={setIsGameFrozen}
+        isGodMode={isGodMode}
+        setIsGodMode={setIsGodMode}
+        gems={gems}
+        setGems={setGems}
+        startBGM={startBGM}
+        stopBGM={stopBGM}
+        playBossIntroSFX={playBossIntroSFX}
+        playRelicBurstSFX={playRelicBurstSFX}
+        playRuneShatterSFX={playRuneShatterSFX}
+        playBombSFX={playBombSFX}
+        playRainbowSFX={playRainbowSFX}
+        playVictorySFX={playVictorySFX}
+        playDefeatSFX={playDefeatSFX}
+        spawnLootDropEffects={spawnLootDropEffects}
+        setChainCombo={setChainCombo}
+        setChainTimer={setChainTimer}
       />
     </motion.div>
   );

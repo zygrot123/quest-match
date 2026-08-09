@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Shield, Sword, Flame, Sparkles, UserCheck, BookOpen, Crown, Zap } from 'lucide-react';
 import { HeroProfile } from '../types';
-import valeriusImg from '../assets/images/valerius_hero_portrait_1786283697062.jpg';
-import lyraImg from '../assets/images/lyra_hero_portrait_1786283710907.jpg';
+import valeriusImg from '../assets/images/valerius_hero_portrait_1786296956609.jpg';
+import lyraImg from '../assets/images/lyra_hero_portrait_1786296977248.jpg';
 
 interface HeroSelectModalProps {
   onSelectHero: (hero: HeroProfile) => void;

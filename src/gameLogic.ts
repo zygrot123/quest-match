@@ -1,4 +1,4 @@
-import { Gem, GemType, SpecialGemType } from './types';
+import { Gem, GemType, SpecialGemType, RuneSeal, RuneSealType, EnemyType } from './types';
 import { ROWS, COLS } from './constants';
 
 export const GEM_TYPES: GemType[] = ['sword', 'fire', 'water', 'earth', 'heart', 'light', 'dark'];
@@ -69,22 +69,21 @@ export const analyzeMatches = (gems: Gem[], lastSwappedPos?: { row: number; col:
   const hRuns: { row: number; cols: number[]; type: GemType }[] = [];
   const vRuns: { col: number; rows: number[]; type: GemType }[] = [];
 
-  // 1. Scan Horizontal Runs (dark_void vertical gems cannot match horizontally)
+  // 1. Scan Horizontal Runs
   for (let r = 0; r < ROWS; r++) {
     let currentCols: number[] = [];
     let currentType: GemType | null = null;
 
     for (let c = 0; c < COLS; c++) {
       const gem = grid[r][c];
-      const isValidForHRun = gem && gem.special !== 'dark_void';
-      if (isValidForHRun && gem.type === currentType) {
+      if (gem && gem.type === currentType) {
         currentCols.push(c);
       } else {
         if (currentCols.length >= 3 && currentType) {
           hRuns.push({ row: r, cols: [...currentCols], type: currentType });
         }
-        currentCols = isValidForHRun ? [c] : [];
-        currentType = isValidForHRun ? gem.type : null;
+        currentCols = gem ? [c] : [];
+        currentType = gem ? gem.type : null;
       }
     }
     if (currentCols.length >= 3 && currentType) {
@@ -92,22 +91,21 @@ export const analyzeMatches = (gems: Gem[], lastSwappedPos?: { row: number; col:
     }
   }
 
-  // 2. Scan Vertical Runs (light_holy horizontal gems cannot match vertically)
+  // 2. Scan Vertical Runs
   for (let c = 0; c < COLS; c++) {
     let currentRows: number[] = [];
     let currentType: GemType | null = null;
 
     for (let r = 0; r < ROWS; r++) {
       const gem = grid[r][c];
-      const isValidForVRun = gem && gem.special !== 'light_holy';
-      if (isValidForVRun && gem.type === currentType) {
+      if (gem && gem.type === currentType) {
         currentRows.push(r);
       } else {
         if (currentRows.length >= 3 && currentType) {
           vRuns.push({ col: c, rows: [...currentRows], type: currentType });
         }
-        currentRows = isValidForVRun ? [r] : [];
-        currentType = isValidForVRun ? gem.type : null;
+        currentRows = gem ? [r] : [];
+        currentType = gem ? gem.type : null;
       }
     }
     if (currentRows.length >= 3 && currentType) {
@@ -135,7 +133,7 @@ export const analyzeMatches = (gems: Gem[], lastSwappedPos?: { row: number; col:
     return candidatePositions[Math.floor(candidatePositions.length / 2)];
   };
 
-  // Check for T / L Intersections (3x3 Bomb creation)
+  // Check for T / L Intersections (Cross Bomb creation: detonates row + col)
   hRuns.forEach(hRun => {
     vRuns.forEach(vRun => {
       if (hRun.type === vRun.type && hRun.cols.includes(vRun.col) && vRun.rows.includes(hRun.row)) {
@@ -144,7 +142,7 @@ export const analyzeMatches = (gems: Gem[], lastSwappedPos?: { row: number; col:
           row: intersectionPos.row,
           col: intersectionPos.col,
           gemType: hRun.type,
-          specialType: 'bomb_3x3'
+          specialType: 'bomb_cross'
         });
       }
     });
@@ -152,12 +150,11 @@ export const analyzeMatches = (gems: Gem[], lastSwappedPos?: { row: number; col:
 
   // If no intersection bomb created, check individual runs
   if (specialsToCreate.length === 0) {
+    // 5-matches in a straight line create Rainbow Star
     hRuns.forEach(run => {
       const coords = run.cols.map(c => ({ row: run.row, col: c }));
       const target = chooseTargetPos(coords);
-      if (run.cols.length === 4) {
-        specialsToCreate.push({ ...target, gemType: run.type, specialType: 'light_holy' });
-      } else if (run.cols.length >= 5) {
+      if (run.cols.length >= 5) {
         specialsToCreate.push({ ...target, gemType: run.type, specialType: 'rainbow' });
       }
     });
@@ -165,16 +162,33 @@ export const analyzeMatches = (gems: Gem[], lastSwappedPos?: { row: number; col:
     vRuns.forEach(run => {
       const coords = run.rows.map(r => ({ row: r, col: run.col }));
       const target = chooseTargetPos(coords);
-      if (run.rows.length === 4) {
-        if (!specialsToCreate.some(s => s.row === target.row && s.col === target.col)) {
-          specialsToCreate.push({ ...target, gemType: run.type, specialType: 'dark_void' });
-        }
-      } else if (run.rows.length >= 5) {
+      if (run.rows.length >= 5) {
         if (!specialsToCreate.some(s => s.row === target.row && s.col === target.col)) {
           specialsToCreate.push({ ...target, gemType: run.type, specialType: 'rainbow' });
         }
       }
     });
+
+    // 4-matches (Horizontal Arrow Gem or Vertical Arrow Gem)
+    if (specialsToCreate.length === 0) {
+      hRuns.forEach(run => {
+        const coords = run.cols.map(c => ({ row: run.row, col: c }));
+        const target = chooseTargetPos(coords);
+        if (run.cols.length === 4) {
+          specialsToCreate.push({ ...target, gemType: run.type, specialType: 'arrow_horizontal' });
+        }
+      });
+
+      vRuns.forEach(run => {
+        const coords = run.rows.map(r => ({ row: r, col: run.col }));
+        const target = chooseTargetPos(coords);
+        if (run.rows.length === 4) {
+          if (!specialsToCreate.some(s => s.row === target.row && s.col === target.col)) {
+            specialsToCreate.push({ ...target, gemType: run.type, specialType: 'arrow_vertical' });
+          }
+        }
+      });
+    }
   }
 
   return { matchedIds, specialsToCreate };
@@ -223,23 +237,34 @@ export const getConnectedSameTypeCluster = (gems: Gem[], start: Gem): Gem[] => {
   return cluster;
 };
 
-export const shuffleGems = (gems: Gem[]): Gem[] => {
+export const isCellFrozen = (row: number, col: number, runeSeals?: RuneSeal[]): boolean => {
+  if (!runeSeals || runeSeals.length === 0) return false;
+  return runeSeals.some(s => s.row === row && s.col === col && s.hp > 0);
+};
+
+export const shuffleGems = (gems: Gem[], runeSeals: RuneSeal[] = []): Gem[] => {
+  const frozenPosKeys = new Set(runeSeals.filter(s => s.hp > 0).map(s => `${s.row},${s.col}`));
+
   for (let attempt = 0; attempt < 100; attempt++) {
-    const shuffled = [...gems];
-    for (let i = shuffled.length - 1; i > 0; i--) {
+    const nonFrozenGems = gems.filter(g => !frozenPosKeys.has(`${g.row},${g.col}`));
+    const frozenGems = gems.filter(g => frozenPosKeys.has(`${g.row},${g.col}`));
+
+    const shuffledNonFrozen = [...nonFrozenGems];
+    for (let i = shuffledNonFrozen.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       
       // Swap properties but keep row/col the same to shuffle in place
-      const tempType = shuffled[i].type;
-      const tempSpecial = shuffled[i].special;
-      const tempId = shuffled[i].id;
+      const tempType = shuffledNonFrozen[i].type;
+      const tempSpecial = shuffledNonFrozen[i].special;
+      const tempId = shuffledNonFrozen[i].id;
       
-      shuffled[i] = { ...shuffled[i], type: shuffled[j].type, special: shuffled[j].special, id: shuffled[j].id };
-      shuffled[j] = { ...shuffled[j], type: tempType, special: tempSpecial, id: tempId };
+      shuffledNonFrozen[i] = { ...shuffledNonFrozen[i], type: shuffledNonFrozen[j].type, special: shuffledNonFrozen[j].special, id: shuffledNonFrozen[j].id };
+      shuffledNonFrozen[j] = { ...shuffledNonFrozen[j], type: tempType, special: tempSpecial, id: tempId };
     }
     
-    if (findMatches(shuffled).size === 0 && findHint(shuffled)) {
-      return shuffled;
+    const combined = [...frozenGems, ...shuffledNonFrozen];
+    if (findMatches(combined).size === 0 && findHint(combined, runeSeals)) {
+      return combined;
     }
   }
   // Fallback if we can't find a perfect shuffle
@@ -257,7 +282,9 @@ export const isAdjacent = (g1: Gem, g2: Gem): boolean => {
 // throwaway copy of the board, and checks if that produces a match. Returns
 // the pair of gem ids to highlight, or null if the board has no valid move
 // (shouldn't normally happen since the grid is regenerated on stalemate).
-export const findHint = (gems: Gem[]): [string, string] | null => {
+// Also respects frozen/sealed tiles: frozen gems cannot be swapped!
+export const findHint = (gems: Gem[], runeSeals: RuneSeal[] = []): [string, string] | null => {
+  const frozenPosKeys = new Set(runeSeals.filter(s => s.hp > 0).map(s => `${s.row},${s.col}`));
   const grid = new Array(ROWS).fill(null).map(() => new Array(COLS).fill(null)) as (Gem | null)[][];
   gems.forEach(g => {
     if (g.row >= 0 && g.row < ROWS && g.col >= 0 && g.col < COLS) {
@@ -266,6 +293,18 @@ export const findHint = (gems: Gem[]): [string, string] | null => {
   });
 
   const tryPair = (a: Gem, b: Gem): boolean => {
+    // If either gem is frozen, player cannot swap it!
+    if (frozenPosKeys.has(`${a.row},${a.col}`) || frozenPosKeys.has(`${b.row},${b.col}`)) {
+      return false;
+    }
+    // Special + Special combo is always valid
+    if (a.special && b.special) {
+      return true;
+    }
+    // Rainbow + any gem is always valid
+    if (a.special === 'rainbow' || b.special === 'rainbow') {
+      return true;
+    }
     const swapped = gems.map(g => {
       if (g.id === a.id) return { ...g, row: b.row, col: b.col };
       if (g.id === b.id) return { ...g, row: a.row, col: a.col };
@@ -288,4 +327,154 @@ export const findHint = (gems: Gem[]): [string, string] | null => {
   }
 
   return null;
+};
+
+/**
+ * Generates Arcane Rune Seals (translucent block barriers over grid cells)
+ * based on the encounter difficulty, enemy type, and dungeon chapter.
+ */
+export const generateStageRuneSeals = (
+  layer: number,
+  enemyType: EnemyType = 'goblin',
+  isBoss = false,
+  chapter = 1
+): RuneSeal[] => {
+  // Determine seal theme based on enemy affinity
+  let sealType: RuneSealType = 'arcane';
+  if (['dragon', 'imp', 'phoenix'].includes(enemyType)) {
+    sealType = 'dragon';
+  } else if (['kraken', 'slime', 'elf'].includes(enemyType)) {
+    sealType = 'frost';
+  } else if (['golem', 'mummy', 'skeleton'].includes(enemyType)) {
+    sealType = 'relic';
+  } else {
+    sealType = 'arcane';
+  }
+
+  const positions: { row: number; col: number; hp: number }[] = [];
+  const patternIndex = (layer + chapter) % 4;
+
+  if (isBoss) {
+    // Boss pattern: 8 to 10 seals with reinforced 2-HP seals
+    const bossCoords = [
+      { row: 1, col: 1, hp: 2 }, { row: 1, col: 5, hp: 2 },
+      { row: 5, col: 1, hp: 2 }, { row: 5, col: 5, hp: 2 },
+      { row: 2, col: 3, hp: 1 }, { row: 4, col: 3, hp: 1 },
+      { row: 3, col: 2, hp: 1 }, { row: 3, col: 4, hp: 1 },
+      { row: 3, col: 3, hp: 2 },
+    ];
+    positions.push(...bossCoords);
+  } else {
+    switch (patternIndex) {
+      case 0: // Cross / Plus
+        positions.push(
+          { row: 3, col: 3, hp: layer >= 4 ? 2 : 1 },
+          { row: 2, col: 3, hp: 1 },
+          { row: 4, col: 3, hp: 1 },
+          { row: 3, col: 2, hp: 1 },
+          { row: 3, col: 4, hp: 1 }
+        );
+        break;
+      case 1: // Four Corners + Center
+        positions.push(
+          { row: 1, col: 1, hp: layer >= 3 ? 2 : 1 },
+          { row: 1, col: 5, hp: layer >= 3 ? 2 : 1 },
+          { row: 5, col: 1, hp: layer >= 3 ? 2 : 1 },
+          { row: 5, col: 5, hp: layer >= 3 ? 2 : 1 },
+          { row: 3, col: 3, hp: 1 }
+        );
+        break;
+      case 2: // Diamond Ring
+        positions.push(
+          { row: 2, col: 3, hp: 1 },
+          { row: 3, col: 2, hp: 1 },
+          { row: 3, col: 4, hp: 1 },
+          { row: 4, col: 3, hp: 1 },
+          { row: 1, col: 3, hp: layer >= 4 ? 2 : 1 },
+          { row: 5, col: 3, hp: layer >= 4 ? 2 : 1 }
+        );
+        break;
+      default: // Twin Columns
+        positions.push(
+          { row: 2, col: 2, hp: 1 },
+          { row: 3, col: 2, hp: layer >= 4 ? 2 : 1 },
+          { row: 4, col: 2, hp: 1 },
+          { row: 2, col: 4, hp: 1 },
+          { row: 3, col: 4, hp: layer >= 4 ? 2 : 1 },
+          { row: 4, col: 4, hp: 1 }
+        );
+        break;
+    }
+  }
+
+  return positions.map((p, idx) => ({
+    id: `seal-${Date.now()}-${idx}-${p.row}-${p.col}`,
+    row: p.row,
+    col: p.col,
+    hp: p.hp,
+    maxHp: p.hp,
+    type: sealType,
+  }));
+};
+
+/**
+ * Checks for direct matches on a rune seal OR adjacent matches touching it.
+ * Damaged seals drop 1 HP; at 0 HP they shatter and trigger Arcane bursts.
+ */
+export const checkRuneSealHits = (
+  currentSeals: RuneSeal[],
+  matchedGems: Gem[],
+  blastCoords: { row: number; col: number }[] = []
+): {
+  remainingSeals: RuneSeal[];
+  shatteredSeals: RuneSeal[];
+  crackedSeals: RuneSeal[];
+} => {
+  if (currentSeals.length === 0) {
+    return { remainingSeals: [], shatteredSeals: [], crackedSeals: [] };
+  }
+
+  // Set of all affected coordinate keys
+  const affectedKeys = new Set<string>();
+
+  // 1. Direct matched gem locations
+  matchedGems.forEach(g => {
+    affectedKeys.add(`${g.row},${g.col}`);
+    // 2. Orthogonally adjacent neighbors (Up, Down, Left, Right)
+    if (g.row > 0) affectedKeys.add(`${g.row - 1},${g.col}`);
+    if (g.row < ROWS - 1) affectedKeys.add(`${g.row + 1},${g.col}`);
+    if (g.col > 0) affectedKeys.add(`${g.row},${g.col - 1}`);
+    if (g.col < COLS - 1) affectedKeys.add(`${g.row},${g.col + 1}`);
+  });
+
+  // 3. Any special bomb or laser blast coordinates
+  blastCoords.forEach(b => {
+    affectedKeys.add(`${b.row},${b.col}`);
+    if (b.row > 0) affectedKeys.add(`${b.row - 1},${b.col}`);
+    if (b.row < ROWS - 1) affectedKeys.add(`${b.row + 1},${b.col}`);
+    if (b.col > 0) affectedKeys.add(`${b.row},${b.col - 1}`);
+    if (b.col < COLS - 1) affectedKeys.add(`${b.row},${b.col + 1}`);
+  });
+
+  const remainingSeals: RuneSeal[] = [];
+  const shatteredSeals: RuneSeal[] = [];
+  const crackedSeals: RuneSeal[] = [];
+
+  currentSeals.forEach(seal => {
+    const sealKey = `${seal.row},${seal.col}`;
+    if (affectedKeys.has(sealKey)) {
+      const nextHp = seal.hp - 1;
+      if (nextHp <= 0) {
+        shatteredSeals.push({ ...seal, hp: 0 });
+      } else {
+        const updated = { ...seal, hp: nextHp };
+        crackedSeals.push(updated);
+        remainingSeals.push(updated);
+      }
+    } else {
+      remainingSeals.push(seal);
+    }
+  });
+
+  return { remainingSeals, shatteredSeals, crackedSeals };
 };

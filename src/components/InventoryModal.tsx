@@ -5,6 +5,7 @@ import { getRarityColor, getRarityBadge, calculateTotalStats, getItemSellValue }
 import { cn } from '../utils';
 import { audio } from '../audio';
 import { MerchantSprite, MERCHANT_TAUNTS } from './MerchantSprite';
+import { ItemSprite } from './ItemSprite';
 
 interface InventoryModalProps {
   isOpen: boolean;
@@ -108,12 +109,30 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
   const confirmSell = () => {
     if (!pendingSellItem) return;
     const goldEarned = getItemSellValue(pendingSellItem);
+    const itemToSell = pendingSellItem;
 
-    setGameState(prev => ({
-      ...prev,
-      gold: prev.gold + goldEarned,
-      inventory: prev.inventory.filter(i => i.id !== pendingSellItem.id),
-    }));
+    setGameState(prev => {
+      // 1. Remove from inventory
+      const newInventory = prev.inventory.filter(i => i.id !== itemToSell.id);
+      
+      // 2. Also unequip if currently equipped
+      const newEquipment = { ...prev.equipment };
+      if (newEquipment.head?.id === itemToSell.id) newEquipment.head = null;
+      if (newEquipment.body?.id === itemToSell.id) newEquipment.body = null;
+      if (newEquipment.weapon?.id === itemToSell.id) newEquipment.weapon = null;
+
+      const updatedStats = calculateTotalStats(prev.stats, newEquipment);
+      const newPlayerMaxHp = updatedStats.maxHp;
+
+      return {
+        ...prev,
+        gold: prev.gold + goldEarned,
+        inventory: newInventory,
+        equipment: newEquipment,
+        playerMaxHp: newPlayerMaxHp,
+        playerHp: Math.min(newPlayerMaxHp, prev.playerHp)
+      };
+    });
 
     const confirmLines = MERCHANT_TAUNTS.sellConfirm;
     setMerchantMsg(confirmLines[Math.floor(Math.random() * confirmLines.length)]);
@@ -121,6 +140,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
     setPendingSellItem(null);
 
     audio.playTone(550, 'sine', 0.1, 0.3);
+    setTimeout(() => audio.playTone(750, 'triangle', 0.12, 0.25), 60);
   };
 
   const cancelSell = () => {
@@ -233,8 +253,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
 
                     {item ? (
                       <div className="my-1.5 flex flex-col items-center text-center">
-                        <span className="text-2xl mb-0.5">{item.icon}</span>
-                        <span className="font-extrabold text-xs text-white line-clamp-1 leading-tight">{item.name}</span>
+                        <ItemSprite item={item} size="md" />
+                        <span className="font-extrabold text-xs text-white line-clamp-1 leading-tight mt-1">{item.name}</span>
                         
                         {/* Compact Stats */}
                         <div className="flex items-center justify-center gap-1.5 text-[10px] font-semibold text-white/80 mt-1">
@@ -307,9 +327,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                       )}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-12 h-12 rounded-xl bg-black/50 border border-white/10 flex items-center justify-center text-2xl shrink-0">
-                          {item.icon}
-                        </div>
+                        <ItemSprite item={item} size="md" />
 
                         <div className="flex flex-col min-w-0 flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -370,9 +388,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
         {pendingSellItem && (
           <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-slate-950 border-2 border-amber-500 rounded-2xl p-4 max-w-sm w-full text-center space-y-3 shadow-[0_0_30px_rgba(245,158,11,0.5)]">
-              <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 flex items-center justify-center mx-auto text-2xl">
-                💰
-              </div>
+              <ItemSprite item={pendingSellItem} size="lg" className="mx-auto" />
               <div>
                 <h4 className="text-amber-300 font-extrabold text-sm uppercase">Sell Confirmation</h4>
                 <p className="text-xs text-slate-300 mt-1">

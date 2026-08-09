@@ -3,11 +3,11 @@ import { Equipment, ItemPassive, ItemRarity, MapNode, MapNodeType, EnemyType } f
 export const generateMap = (depth: number): MapNode[][] => {
   const map: MapNode[][] = [];
   const minionTypes: EnemyType[] = ['goblin', 'slime', 'imp', 'skeleton'];
-  const bossTypes: EnemyType[] = ['dragon', 'elf', 'golem'];
+  const bossTypes: EnemyType[] = ['dragon', 'elf', 'golem', 'minotaur', 'phoenix'];
 
   for (let i = 0; i < depth; i++) {
     const isApexBossLayer = (i === depth - 1);
-    const layerSize = isApexBossLayer ? 1 : Math.max(2, Math.floor(Math.random() * 2) + 2); // 2-3 nodes per layer, 1 Apex Boss
+    const layerSize = isApexBossLayer ? 1 : Math.max(2, Math.floor(Math.random() * 2) + 2);
     const layer: MapNode[] = [];
     
     for (let j = 0; j < layerSize; j++) {
@@ -69,7 +69,6 @@ export const generateMap = (depth: number): MapNode[][] => {
       }
     });
 
-    // Ensure every node in nextLayer has at least one parent
     nextLayer.forEach((_, nextJ) => {
       const hasParent = currentLayer.some(n => n.children?.includes(nextJ));
       if (!hasParent) {
@@ -90,56 +89,326 @@ export const generateMap = (depth: number): MapNode[][] => {
   return map;
 };
 
-const adjectives: Record<ItemRarity, string[]> = {
-  common: ['Apprentice', 'Iron', 'Bronze', 'Wooden', 'Sturdy', 'Plain'],
-  rare: ['Glacial', 'Volcanic', 'Verdant', 'Runic', 'Slayer\'s', 'Blessed'],
-  epic: ['Infernal', 'Tidal', 'Gaia\'s', 'Phoenix', 'Abyssal', 'Vampiric'],
-  legendary: ['Dragonlord\'s', 'Celestial', 'Godslayer', 'Eternal', 'Omni-Element', 'Mythic']
-};
+// Realistic fantasy equipment database with authentic craftsmanship & balanced stats
+interface RealisticItemTemplate {
+  name: string;
+  slot: 'head' | 'body' | 'weapon';
+  baseRarity: ItemRarity;
+  icon: string;
+  description: string;
+  baseAtk: number;
+  baseDef: number;
+  baseHp: number;
+  elemBonus?: { type: 'fire' | 'water' | 'earth' | 'light' | 'dark'; value: number };
+  critBonus?: { chance: number; dmg: number };
+  possiblePassives?: ItemPassive[];
+}
 
-const headNouns = ['Helm', 'Crown', 'Diadem', 'Visor', 'Circlet'];
-const bodyNouns = ['Armor', 'Cuirass', 'Robe', 'Plate', 'Vestments'];
-const weaponNouns = ['Blade', 'Staff', 'Trident', 'Hammer', 'Greatsword'];
+export const REALISTIC_ITEMS_DATABASE: RealisticItemTemplate[] = [
+  // --- WEAPONS ---
+  {
+    name: 'Iron Broadsword',
+    slot: 'weapon',
+    baseRarity: 'common',
+    icon: '🗡️',
+    description: 'A standard castle-forged blade with sturdy crossguard and brass pommel.',
+    baseAtk: 4,
+    baseDef: 1,
+    baseHp: 5
+  },
+  {
+    name: 'Hunter\'s Recurve Bow',
+    slot: 'weapon',
+    baseRarity: 'common',
+    icon: '🏹',
+    description: 'Yew wood bow with waxed hemp string, built for swift pinpoint strikes.',
+    baseAtk: 4,
+    baseDef: 0,
+    baseHp: 0,
+    critBonus: { chance: 3, dmg: 15 }
+  },
+  {
+    name: 'Ashwood Quarterstaff',
+    slot: 'weapon',
+    baseRarity: 'common',
+    icon: '🦯',
+    description: 'A balanced fighting stave tipped with bronze ferrules.',
+    baseAtk: 3,
+    baseDef: 2,
+    baseHp: 10
+  },
+  {
+    name: 'Tempered Steel Arming Sword',
+    slot: 'weapon',
+    baseRarity: 'rare',
+    icon: '⚔️',
+    description: 'Folded high-carbon steel, keenly balanced for tactical parries and slashes.',
+    baseAtk: 6,
+    baseDef: 2,
+    baseHp: 10,
+    critBonus: { chance: 3, dmg: 20 }
+  },
+  {
+    name: 'Silver-Edged Estoc',
+    slot: 'weapon',
+    baseRarity: 'rare',
+    icon: '🤺',
+    description: 'A rigid thrusting rapier inlaid with fine silver filigree to pierce armor seams.',
+    baseAtk: 6,
+    baseDef: 1,
+    baseHp: 8,
+    critBonus: { chance: 5, dmg: 25 }
+  },
+  {
+    name: 'Dwarven War Flail',
+    slot: 'weapon',
+    baseRarity: 'rare',
+    icon: '🪓',
+    description: 'A heavy spiked iron sphere on hardened steel chain links.',
+    baseAtk: 7,
+    baseDef: 1,
+    baseHp: 12,
+    elemBonus: { type: 'earth', value: 2 }
+  },
+  {
+    name: 'Flameforged Longsword',
+    slot: 'weapon',
+    baseRarity: 'epic',
+    icon: '🔥',
+    description: 'Quenched in subterranean magma, its tempered edge radiates searing heat.',
+    baseAtk: 9,
+    baseDef: 2,
+    baseHp: 15,
+    elemBonus: { type: 'fire', value: 3 },
+    possiblePassives: [
+      { type: 'elementBoost', value: 12, element: 'fire', name: 'Pyro Resonance', description: '+12% Fire Gem Match Damage' },
+      { type: 'dotBurn', value: 2, name: 'Searing Edge', description: 'Burns enemy for 2 DMG per turn' }
+    ]
+  },
+  {
+    name: 'Tidecaller Glaive',
+    slot: 'weapon',
+    baseRarity: 'epic',
+    icon: '🔱',
+    description: 'A marine-polearm carved from iridescent coral and tempered river-steel.',
+    baseAtk: 8,
+    baseDef: 3,
+    baseHp: 20,
+    elemBonus: { type: 'water', value: 3 },
+    possiblePassives: [
+      { type: 'elementBoost', value: 12, element: 'water', name: 'Tidal Flow', description: '+12% Water Gem Match Damage' },
+      { type: 'vampire', value: 3, name: 'Siphon Tide', description: 'Heals hero for 3% of match damage dealt' }
+    ]
+  },
+  {
+    name: 'Dragonfang Halberd',
+    slot: 'weapon',
+    baseRarity: 'legendary',
+    icon: '🐉',
+    description: 'Masterwork poleaxe forged from a wyrm\'s hardened ivory tooth and obsidian core.',
+    baseAtk: 12,
+    baseDef: 4,
+    baseHp: 25,
+    elemBonus: { type: 'fire', value: 4 },
+    critBonus: { chance: 4, dmg: 30 },
+    possiblePassives: [
+      { type: 'dotBurn', value: 3, name: 'Wyrmflame Brand', description: 'Burns enemy for 3 DMG per turn' },
+      { type: 'vampire', value: 4, name: 'Draconic Feast', description: 'Heals hero for 4% of match damage dealt' }
+    ]
+  },
+  {
+    name: 'Dawnstar Relic Blade',
+    slot: 'weapon',
+    baseRarity: 'legendary',
+    icon: '✨',
+    description: 'Ancient solar greatsword passed down by the holy Knights of the Radiant Dawn.',
+    baseAtk: 11,
+    baseDef: 4,
+    baseHp: 30,
+    elemBonus: { type: 'light', value: 4 },
+    critBonus: { chance: 5, dmg: 25 },
+    possiblePassives: [
+      { type: 'slowHeal', value: 2, name: 'Sunlight Blessing', description: 'Regenerates +2 HP each turn in battle' },
+      { type: 'elementBoost', value: 15, element: 'earth', name: 'Radiant Might', description: '+15% Earth/Light match potency' }
+    ]
+  },
 
-const icons = {
-  head: ['🪖', '👑', '🎩', '🤠', '🔮'],
-  body: ['👕', '🥋', '🧥', '🦺', '🛡️'],
-  weapon: ['🗡️', '⚔️', '🪄', '🪓', '🔱']
-};
+  // --- HEADGEAR ---
+  {
+    name: 'Padded Arming Cap',
+    slot: 'head',
+    baseRarity: 'common',
+    icon: '🧢',
+    description: 'Multi-layered quilted linen coif that softens bludgeoning impacts.',
+    baseAtk: 0,
+    baseDef: 2,
+    baseHp: 12
+  },
+  {
+    name: 'Hardened Leather Hood',
+    slot: 'head',
+    baseRarity: 'common',
+    icon: '🤠',
+    description: 'Boiled cowhide hood with brass rivets, favored by scouts and trackers.',
+    baseAtk: 1,
+    baseDef: 2,
+    baseHp: 10
+  },
+  {
+    name: 'Iron Kettle Bascinet',
+    slot: 'head',
+    baseRarity: 'rare',
+    icon: '🪖',
+    description: 'A conical iron helmet with broad protective brim and chin strap.',
+    baseAtk: 0,
+    baseDef: 4,
+    baseHp: 22
+  },
+  {
+    name: 'Ranger\'s Feathered Sallet',
+    slot: 'head',
+    baseRarity: 'rare',
+    icon: '🎩',
+    description: 'Streamlined curved helmet crowned with a falcon feather for vision agility.',
+    baseAtk: 2,
+    baseDef: 3,
+    baseHp: 18,
+    critBonus: { chance: 2, dmg: 10 }
+  },
+  {
+    name: 'Spired Mage Circlet',
+    slot: 'head',
+    baseRarity: 'epic',
+    icon: '🔮',
+    description: 'A silver band set with a focusing sapphire that steadies elemental concentration.',
+    baseAtk: 2,
+    baseDef: 4,
+    baseHp: 25,
+    elemBonus: { type: 'water', value: 2 },
+    possiblePassives: [
+      { type: 'slowHeal', value: 2, name: 'Mind Clarity', description: 'Restores +2 HP every turn in combat' }
+    ]
+  },
+  {
+    name: 'Crown of the Mountain Sentinel',
+    slot: 'head',
+    baseRarity: 'legendary',
+    icon: '👑',
+    description: 'Heavy granite-forged coronet that grants unshakable stoic resilience.',
+    baseAtk: 2,
+    baseDef: 7,
+    baseHp: 45,
+    elemBonus: { type: 'earth', value: 3 },
+    possiblePassives: [
+      { type: 'hpBoost', value: 10, name: 'Titan Fortitude', description: '+10% Max HP pool boost' },
+      { type: 'slowHeal', value: 3, name: 'Earthen Vigour', description: 'Restores +3 HP every turn in combat' }
+    ]
+  },
+
+  // --- BODY ARMOR ---
+  {
+    name: 'Quilted Linen Gambeson',
+    slot: 'body',
+    baseRarity: 'common',
+    icon: '🥋',
+    description: 'Tough multilayered wool and linen tunic providing essential defense.',
+    baseAtk: 0,
+    baseDef: 3,
+    baseHp: 18
+  },
+  {
+    name: 'Studded Leather Vest',
+    slot: 'body',
+    baseRarity: 'common',
+    icon: '🦺',
+    description: 'Reinforced oiled leather with iron studs across the chest and shoulders.',
+    baseAtk: 1,
+    baseDef: 3,
+    baseHp: 20
+  },
+  {
+    name: 'Interlocking Chainmail Hauberk',
+    slot: 'body',
+    baseRarity: 'rare',
+    icon: '🧥',
+    description: 'Thousands of riveted iron rings layered over heavy boiled padding.',
+    baseAtk: 0,
+    baseDef: 6,
+    baseHp: 35
+  },
+  {
+    name: 'Hardened Brigandine Coat',
+    slot: 'body',
+    baseRarity: 'rare',
+    icon: '🛡️',
+    description: 'Overlapping rectangular steel plates riveted beneath a sturdy velvet shell.',
+    baseAtk: 1,
+    baseDef: 5,
+    baseHp: 30
+  },
+  {
+    name: 'Tempered Knight Breastplate',
+    slot: 'body',
+    baseRarity: 'epic',
+    icon: '🛡️',
+    description: 'Solid forged steel cuirass with central deflection ridge and brass trim.',
+    baseAtk: 1,
+    baseDef: 9,
+    baseHp: 50,
+    possiblePassives: [
+      { type: 'hpBoost', value: 8, name: 'Knight\'s Vow', description: '+8% Max HP pool boost' }
+    ]
+  },
+  {
+    name: 'Dragonscale Plate Armor',
+    slot: 'body',
+    baseRarity: 'legendary',
+    icon: '🐉',
+    description: 'Laminated crimson dragon scales woven with dwarf-steel wire, impervious to heat.',
+    baseAtk: 2,
+    baseDef: 12,
+    baseHp: 70,
+    elemBonus: { type: 'fire', value: 3 },
+    possiblePassives: [
+      { type: 'hpBoost', value: 12, name: 'Dragon Heart', description: '+12% Max HP pool boost' },
+      { type: 'slowHeal', value: 2, name: 'Molten Blood', description: 'Restores +2 HP every turn in combat' }
+    ]
+  }
+];
 
 export const getRarityColor = (rarity: ItemRarity) => {
   switch (rarity) {
-    case 'common': return 'text-slate-300 border-slate-600 bg-slate-900/60';
-    case 'rare': return 'text-blue-400 border-blue-500/60 bg-blue-950/60 shadow-[0_0_10px_rgba(59,130,246,0.3)]';
-    case 'epic': return 'text-purple-400 border-purple-500/60 bg-purple-950/60 shadow-[0_0_15px_rgba(168,85,247,0.4)]';
-    case 'legendary': return 'text-amber-300 border-amber-500/80 bg-amber-950/80 shadow-[0_0_20px_rgba(245,158,11,0.5)]';
+    case 'common': return 'text-slate-300 border-slate-700/80 bg-slate-900/80';
+    case 'rare': return 'text-sky-300 border-sky-500/50 bg-sky-950/70 shadow-[0_0_12px_rgba(14,165,233,0.2)]';
+    case 'epic': return 'text-purple-300 border-purple-500/50 bg-purple-950/70 shadow-[0_0_15px_rgba(168,85,247,0.25)]';
+    case 'legendary': return 'text-amber-300 border-amber-500/70 bg-amber-950/80 shadow-[0_0_20px_rgba(245,158,11,0.35)]';
   }
 };
 
 export const getRarityBadge = (rarity: ItemRarity) => {
   switch (rarity) {
     case 'common': return 'bg-slate-800 text-slate-300 border-slate-600';
-    case 'rare': return 'bg-blue-950 text-blue-300 border-blue-500/50';
+    case 'rare': return 'bg-sky-950 text-sky-300 border-sky-500/50';
     case 'epic': return 'bg-purple-950 text-purple-300 border-purple-500/50';
-    case 'legendary': return 'bg-amber-950 text-amber-300 border-amber-500/80 animate-pulse';
+    case 'legendary': return 'bg-amber-950 text-amber-300 border-amber-500/80';
   }
 };
 
 export const getItemPrice = (item: Equipment): number => {
   switch (item.rarity) {
-    case 'legendary': return 220;
-    case 'epic': return 120;
-    case 'rare': return 60;
-    case 'common': return 25;
+    case 'legendary': return 160;
+    case 'epic': return 90;
+    case 'rare': return 45;
+    case 'common': return 20;
   }
 };
 
 export const getItemSellValue = (item: Equipment): number => {
   switch (item.rarity) {
     case 'legendary': return 80;
-    case 'epic': return 40;
-    case 'rare': return 20;
-    case 'common': return 8;
+    case 'epic': return 45;
+    case 'rare': return 22;
+    case 'common': return 10;
   }
 };
 
@@ -152,142 +421,73 @@ export const generateRandomEquipment = (
   const selectedSlot = slot || (['head', 'body', 'weapon'][Math.floor(Math.random() * 3)] as 'head' | 'body' | 'weapon');
   
   // Calculate balanced rarity thresholds based on level & boss flag
-  const rawRoll = Math.random() + (isBoss ? 0.18 : 0);
-  let rarity: ItemRarity = 'common';
+  const roll = Math.random() + (isBoss ? 0.25 : 0);
+  let targetRarity: ItemRarity = 'common';
 
   if (level <= 2) {
-    // Stage 1-2: Extremely rare legendary, low epic chance
-    if (rawRoll > 0.985) rarity = 'legendary';
-    else if (rawRoll > 0.92) rarity = 'epic';
-    else if (rawRoll > 0.70) rarity = 'rare';
-    else rarity = 'common';
-  } else if (level <= 4) {
-    // Stage 3-4: Modest rare & epic chance
-    if (rawRoll > 0.95) rarity = 'legendary';
-    else if (rawRoll > 0.82) rarity = 'epic';
-    else if (rawRoll > 0.55) rarity = 'rare';
-    else rarity = 'common';
-  } else if (level <= 6) {
-    // Stage 5-6: Higher tier drops unlocked
-    if (rawRoll > 0.90) rarity = 'legendary';
-    else if (rawRoll > 0.72) rarity = 'epic';
-    else if (rawRoll > 0.42) rarity = 'rare';
-    else rarity = 'common';
+    if (roll > 0.98) targetRarity = 'legendary';
+    else if (roll > 0.90) targetRarity = 'epic';
+    else if (roll > 0.65) targetRarity = 'rare';
+    else targetRarity = 'common';
+  } else if (level <= 5) {
+    if (roll > 0.94) targetRarity = 'legendary';
+    else if (roll > 0.80) targetRarity = 'epic';
+    else if (roll > 0.45) targetRarity = 'rare';
+    else targetRarity = 'common';
   } else {
-    // Stage 7+: Endgame drops
-    if (rawRoll > 0.82) rarity = 'legendary';
-    else if (rawRoll > 0.58) rarity = 'epic';
-    else if (rawRoll > 0.30) rarity = 'rare';
-    else rarity = 'common';
+    if (roll > 0.85) targetRarity = 'legendary';
+    else if (roll > 0.60) targetRarity = 'epic';
+    else if (roll > 0.30) targetRarity = 'rare';
+    else targetRarity = 'common';
   }
 
-  const adjList = adjectives[rarity];
-  const nounList = selectedSlot === 'head' ? headNouns : selectedSlot === 'body' ? bodyNouns : weaponNouns;
+  // Filter templates matching slot and rarity (or fall back to closest)
+  let pool = REALISTIC_ITEMS_DATABASE.filter(t => t.slot === selectedSlot && t.baseRarity === targetRarity);
+  if (pool.length === 0) {
+    pool = REALISTIC_ITEMS_DATABASE.filter(t => t.slot === selectedSlot);
+  }
 
-  // Build every adjective+noun combo available for this slot/rarity, and prefer
-  // one the player doesn't already own (in inventory or equipped) so drops feel
-  // fresh instead of handing back the same item name repeatedly.
-  const allCombos = adjList.flatMap(a => nounList.map(n => `${a} ${n}`));
-  const freshCombos = excludeNames ? allCombos.filter(name => !excludeNames.has(name)) : allCombos;
-  const pool = freshCombos.length > 0 ? freshCombos : allCombos; // fall back to allowing a repeat only if every combo is owned
-  const chosenName = pool[Math.floor(Math.random() * pool.length)];
-  const [adj] = chosenName.split(' ');
-  const noun = chosenName.slice(adj.length + 1);
-  
-  const icon = icons[selectedSlot][Math.floor(Math.random() * icons[selectedSlot].length)];
-  
-  const rarityMult = rarity === 'legendary' ? 2.5 : rarity === 'epic' ? 1.8 : rarity === 'rare' ? 1.3 : 1.0;
+  const unownedPool = excludeNames ? pool.filter(t => !excludeNames.has(t.name)) : pool;
+  const chosenTemplate = unownedPool.length > 0 
+    ? unownedPool[Math.floor(Math.random() * unownedPool.length)]
+    : pool[Math.floor(Math.random() * pool.length)];
+
+  // Level scaling: +10% per dungeon tier (realistic and capped, avoiding power-trip spikes)
+  const levelMult = 1 + (Math.max(1, level) - 1) * 0.12;
 
   const stats: Equipment['stats'] = {
-    attack: selectedSlot === 'weapon' 
-      ? Math.floor((Math.random() * 4 + 4) * Math.max(1, level * 0.8) * rarityMult) 
-      : Math.floor((Math.random() * 2 + 1) * Math.max(1, level * 0.5) * rarityMult),
-    defense: selectedSlot !== 'weapon' 
-      ? Math.floor((Math.random() * 3 + 2) * Math.max(1, level * 0.7) * rarityMult) 
-      : Math.floor((Math.random() * 1.5) * Math.max(1, level * 0.4) * rarityMult),
-    maxHp: Math.floor((Math.random() * 12 + 10) * Math.max(1, level * 0.8) * rarityMult),
+    attack: Math.round(chosenTemplate.baseAtk * levelMult),
+    defense: Math.round(chosenTemplate.baseDef * levelMult),
+    maxHp: Math.round(chosenTemplate.baseHp * levelMult),
   };
 
-  // Elemental Bonus DMG stats based on slot or rarity
-  if (rarity !== 'common' || Math.random() < 0.25) {
-    const elemTypes: ('fire' | 'water' | 'earth' | 'light' | 'dark' | 'crit')[] = ['fire', 'water', 'earth', 'light', 'dark', 'crit'];
-    const chosenElem = elemTypes[Math.floor(Math.random() * elemTypes.length)];
-    const elemBonus = Math.floor((Math.random() * 4 + 3) * Math.max(1, level * 0.7) * rarityMult);
-    
-    if (chosenElem === 'fire') stats.fireDmg = elemBonus;
-    if (chosenElem === 'water') stats.waterDmg = elemBonus;
-    if (chosenElem === 'earth') stats.earthDmg = elemBonus;
-    if (chosenElem === 'light') stats.lightDmg = elemBonus;
-    if (chosenElem === 'dark') stats.darkDmg = elemBonus;
-    if (chosenElem === 'crit') {
-      stats.critChance = Math.floor(elemBonus * 0.5);
-      stats.critDmg = Math.floor(elemBonus * 2.5);
-    }
+  if (chosenTemplate.elemBonus) {
+    const val = Math.round(chosenTemplate.elemBonus.value * (level > 4 ? 1.3 : 1.0));
+    if (chosenTemplate.elemBonus.type === 'fire') stats.fireDmg = val;
+    if (chosenTemplate.elemBonus.type === 'water') stats.waterDmg = val;
+    if (chosenTemplate.elemBonus.type === 'earth') stats.earthDmg = val;
+    if (chosenTemplate.elemBonus.type === 'light') stats.lightDmg = val;
+    if (chosenTemplate.elemBonus.type === 'dark') stats.darkDmg = val;
   }
 
-  // Generate Special Passives for Rare+ items
+  if (chosenTemplate.critBonus) {
+    stats.critChance = chosenTemplate.critBonus.chance;
+    stats.critDmg = chosenTemplate.critBonus.dmg;
+  }
+
   let passive: ItemPassive | undefined = undefined;
-
-  if (rarity === 'legendary' || rarity === 'epic' || (rarity === 'rare' && Math.random() < 0.5)) {
-    const passivePool: ItemPassive[] = [
-      {
-        type: 'slowHeal',
-        value: Math.floor(2 * rarityMult),
-        name: 'Regeneration',
-        description: `Passively heals +${Math.floor(2 * rarityMult)} HP per turn in battle`
-      },
-      {
-        type: 'dotBurn',
-        value: Math.floor(3 * rarityMult),
-        name: 'Flame Burn',
-        description: `Burns enemy for ${Math.floor(3 * rarityMult)} DMG per turn in battle`
-      },
-      {
-        type: 'vampire',
-        value: Math.floor(6 * rarityMult),
-        name: 'Vampiric Drain',
-        description: `Heals player for ${Math.floor(6 * rarityMult)}% of match damage dealt`
-      },
-      {
-        type: 'hpBoost',
-        value: Math.floor(12 * rarityMult),
-        name: 'Giant\'s Heart',
-        description: `Boosts Max HP by +${Math.floor(12 * rarityMult)}%`
-      },
-      {
-        type: 'elementBoost',
-        value: 35,
-        element: 'fire',
-        name: 'Pyro Essence',
-        description: `Increases Fire Gem damage by +35%`
-      },
-      {
-        type: 'elementBoost',
-        value: 35,
-        element: 'water',
-        name: 'Aquatic Surge',
-        description: `Increases Water Gem damage by +35%`
-      },
-      {
-        type: 'elementBoost',
-        value: 35,
-        element: 'earth',
-        name: 'Terran Might',
-        description: `Increases Earth Gem damage by +35%`
-      }
-    ];
-
-    passive = passivePool[Math.floor(Math.random() * passivePool.length)];
+  if (chosenTemplate.possiblePassives && chosenTemplate.possiblePassives.length > 0) {
+    passive = chosenTemplate.possiblePassives[Math.floor(Math.random() * chosenTemplate.possiblePassives.length)];
   }
 
   return {
     id: `eq-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-    name: `${adj} ${noun}`,
-    slot: selectedSlot,
-    rarity,
+    name: chosenTemplate.name,
+    slot: chosenTemplate.slot,
+    rarity: chosenTemplate.baseRarity,
     stats,
     passive,
-    icon
+    icon: chosenTemplate.icon,
   };
 };
 
@@ -323,13 +523,12 @@ export const calculateTotalStats = (
     }
   });
 
-  // Apply HP boost passives if present
+  // Apply HP boost passives in balanced percentages
   passives.forEach(p => {
     if (p.type === 'hpBoost') {
-      maxHp = Math.floor(maxHp * (1 + p.value / 100));
+      maxHp = Math.floor(maxHp * (1 + Math.min(25, p.value) / 100));
     }
   });
 
   return { attack, defense, maxHp, fireDmg, waterDmg, earthDmg, lightDmg, darkDmg, critChance, critDmg, passives };
 };
-

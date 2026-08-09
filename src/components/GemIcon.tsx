@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sword, Flame, Droplet, Leaf, Heart, Sparkles, Bomb, Sun, Moon, ArrowLeftRight, ArrowUpDown } from 'lucide-react';
+import { Sword, Flame, Droplet, Leaf, Heart, Sparkles, Bomb, Sun, Moon, ArrowLeftRight, ArrowUpDown, Move } from 'lucide-react';
 import { GemType, SpecialGemType } from '../types';
 
 interface GemIconProps {
@@ -188,7 +188,23 @@ export const GemIcon = ({ type, special, className = '', style }: GemIconProps) 
     <div className={`relative w-full h-full flex items-center justify-center ${className}`} style={style}>
       {render3DCrystal()}
 
-      {/* SPECIAL EFFECT BADGES - COMPACT TOP-RIGHT BADGES KEEPING CRYSTAL FULLY VISIBLE */}
+      {/* DIRECTIONAL INTERNAL ENERGY STREAKS */}
+      {(special === 'arrow_horizontal' || special === 'light_holy') && (
+        <div className="absolute inset-x-1 h-[3px] bg-gradient-to-r from-transparent via-yellow-200 to-transparent pointer-events-none z-10 shadow-[0_0_8px_rgba(250,204,21,0.9)] animate-pulse" />
+      )}
+
+      {(special === 'arrow_vertical' || special === 'dark_void') && (
+        <div className="absolute inset-y-1 w-[3px] bg-gradient-to-b from-transparent via-cyan-200 to-transparent pointer-events-none z-10 shadow-[0_0_8px_rgba(6,182,212,0.9)] animate-pulse" />
+      )}
+
+      {(special === 'bomb_cross' || special === 'bomb_3x3') && (
+        <>
+          <div className="absolute inset-x-1.5 h-[2px] bg-gradient-to-r from-transparent via-orange-300 to-transparent pointer-events-none z-10 shadow-[0_0_8px_rgba(249,115,22,0.9)] animate-pulse" />
+          <div className="absolute inset-y-1.5 w-[2px] bg-gradient-to-b from-transparent via-orange-300 to-transparent pointer-events-none z-10 shadow-[0_0_8px_rgba(249,115,22,0.9)] animate-pulse" />
+        </>
+      )}
+
+      {/* SPECIAL EFFECT BADGES - COMPACT TOP-RIGHT BADGES */}
       {special === 'rainbow' && (
         <div className="absolute -top-1 -right-1 z-20 pointer-events-none">
           <div className="bg-slate-950/90 border border-amber-300 rounded-full p-1 shadow-[0_0_8px_rgba(245,158,11,0.8)] animate-spin">
@@ -197,25 +213,33 @@ export const GemIcon = ({ type, special, className = '', style }: GemIconProps) 
         </div>
       )}
 
-      {special === 'light_holy' && (
+      {(special === 'arrow_horizontal' || special === 'light_holy') && (
         <div className="absolute -top-1 -right-1 z-20 pointer-events-none">
-          <div className="bg-slate-950/90 border border-yellow-300 rounded-full p-1 shadow-[0_0_8px_rgba(250,204,21,0.8)] animate-pulse flex items-center justify-center">
+          <div className="bg-slate-950/95 border border-yellow-300 rounded-full p-1 shadow-[0_0_10px_rgba(250,204,21,0.9)] animate-pulse flex items-center justify-center">
             <ArrowLeftRight className="w-3.5 h-3.5 text-yellow-300 drop-shadow-[0_0_4px_rgba(250,204,21,1)] stroke-[3]" />
           </div>
         </div>
       )}
 
-      {special === 'dark_void' && (
+      {(special === 'arrow_vertical' || special === 'dark_void') && (
         <div className="absolute -top-1 -right-1 z-20 pointer-events-none">
-          <div className="bg-slate-950/90 border border-purple-400 rounded-full p-1 shadow-[0_0_8px_rgba(168,85,247,0.8)] animate-pulse flex items-center justify-center">
+          <div className="bg-slate-950/95 border border-cyan-400 rounded-full p-1 shadow-[0_0_10px_rgba(6,182,212,0.9)] animate-pulse flex items-center justify-center">
             <ArrowUpDown className="w-3.5 h-3.5 text-cyan-300 drop-shadow-[0_0_4px_rgba(6,182,212,1)] stroke-[3]" />
+          </div>
+        </div>
+      )}
+
+      {special === 'bomb_cross' && (
+        <div className="absolute -top-1 -right-1 z-20 pointer-events-none">
+          <div className="bg-slate-950/95 border border-orange-400 rounded-full p-1 shadow-[0_0_10px_rgba(249,115,22,0.9)] animate-pulse flex items-center justify-center">
+            <Move className="w-3.5 h-3.5 text-orange-300 drop-shadow-[0_0_4px_rgba(249,115,22,1)] stroke-[2.5]" />
           </div>
         </div>
       )}
 
       {special === 'bomb_3x3' && (
         <div className="absolute -top-1 -right-1 z-20 pointer-events-none">
-          <div className="bg-slate-950/90 border border-red-500 rounded-full p-1 shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse flex items-center justify-center">
+          <div className="bg-slate-950/95 border border-red-500 rounded-full p-1 shadow-[0_0_10px_rgba(239,68,68,0.9)] animate-pulse flex items-center justify-center">
             <Bomb className="w-3.5 h-3.5 text-red-400 drop-shadow-[0_0_4px_rgba(239,68,68,1)] stroke-[2.5]" />
           </div>
         </div>

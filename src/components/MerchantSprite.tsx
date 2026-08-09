@@ -1,102 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import goblinImg from '../assets/images/goblin_spritesheet_1786216397754.jpg';
-import elfImg from '../assets/images/elf_spritesheet_1786209795354.jpg';
-
-const transparentSpriteCache = new Map<string, string>();
-
-const useTransparentSprite = (src: string) => {
-  const [transparentSrc, setTransparentSrc] = useState<string | null>(
-    () => transparentSpriteCache.get(src) ?? null
-  );
-
-  useEffect(() => {
-    const cached = transparentSpriteCache.get(src);
-    if (cached) {
-      setTransparentSrc(cached);
-      return;
-    }
-
-    let cancelled = false;
-    setTransparentSrc(null);
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = src;
-
-    img.onload = () => {
-      if (cancelled) return;
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) return;
-
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-
-      const w = img.width;
-      const h = img.height;
-      const sampleStep = 4;
-      const rSamples: number[] = [];
-      const gSamples: number[] = [];
-      const bSamples: number[] = [];
-
-      const sampleAt = (x: number, y: number) => {
-        const i = (y * w + x) * 4;
-        rSamples.push(data[i]);
-        gSamples.push(data[i + 1]);
-        bSamples.push(data[i + 2]);
-      };
-
-      for (let x = 0; x < w; x += sampleStep) {
-        sampleAt(x, 0);
-        sampleAt(x, h - 1);
-      }
-      for (let y = 0; y < h; y += sampleStep) {
-        sampleAt(0, y);
-        sampleAt(w - 1, y);
-      }
-
-      rSamples.sort((a, b) => a - b);
-      gSamples.sort((a, b) => a - b);
-      bSamples.sort((a, b) => a - b);
-
-      const mid = Math.floor(rSamples.length / 2);
-      const bgR = rSamples[mid] ?? 0;
-      const bgG = gSamples[mid] ?? 0;
-      const bgB = bSamples[mid] ?? 0;
-
-      const tolerance = 60;
-
-      for (let i = 0; i < data.length; i += 4) {
-        const dr = Math.abs(data[i] - bgR);
-        const dg = Math.abs(data[i + 1] - bgG);
-        const db = Math.abs(data[i + 2] - bgB);
-
-        if (dr < tolerance && dg < tolerance && db < tolerance) {
-          data[i + 3] = 0;
-        }
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-      const resultUrl = canvas.toDataURL();
-      transparentSpriteCache.set(src, resultUrl);
-      if (!cancelled) setTransparentSrc(resultUrl);
-    };
-
-    return () => {
-      cancelled = true;
-    };
-  }, [src]);
-
-  return transparentSrc;
-};
+import { Sparkles, MessageCircle } from 'lucide-react';
+import merchantArtImg from '../assets/images/merchant_character_1786296941034.jpg';
+import { audio } from '../audio';
 
 interface MerchantSpriteProps {
   message: string;
-  mood?: 'idle' | 'happy' | 'taunt' | 'surprised';
+  mood?: 'idle' | 'happy' | 'taunt' | 'surprised' | 'talking' | 'give_item' | 'take_item';
   onTap?: () => void;
   className?: string;
 }
@@ -113,7 +23,7 @@ export const MERCHANT_TAUNTS = {
     `${itemName}? That piece has monster blood on it! I'll pay ${gold}G for the horror.`
   ],
   sellConfirm: [
-    "Pleasure robbing... I mean, trading with you! Heheh!",
+    "Pleasure doing business! Heheh!",
     "A fine deal! My coin pouch grows heavier while yours gets lighter!",
     "Sold! No take-backs, hero!"
   ],
@@ -130,7 +40,8 @@ export const MERCHANT_TAUNTS = {
   poke: [
     "Stop poking me and buy something!",
     "I've survived three dragon apocalypses, don't test me!",
-    "Gold makes the world go round, hero! Don't waste my time!"
+    "Gold makes the world go round, hero! Don't waste my time!",
+    "Heheh! Looking for a discount? Defeat the Apex Boss and maybe we'll talk!"
   ]
 };
 
@@ -140,51 +51,88 @@ export const MerchantSprite: React.FC<MerchantSpriteProps> = ({
   onTap,
   className = '',
 }) => {
-  const [frame, setFrame] = useState(0);
-  const transparentSrc = useTransparentSprite(goblinImg);
+  const [flicker, setFlicker] = useState(1);
+  const [isBlinking, setIsBlinking] = useState(false);
+  const [sparkles, setSparkles] = useState<{ id: number; x: number; y: number }[]>([]);
 
   useEffect(() => {
-    const interval = setInterval(() => setFrame(f => (f + 1) % 4), 160);
+    const interval = setInterval(() => {
+      setFlicker(Math.random() * 0.3 + 0.85);
+    }, 180);
     return () => clearInterval(interval);
   }, []);
 
-  const currentRow = mood === 'taunt' || mood === 'happy' ? 1 : mood === 'surprised' ? 2 : 0;
+  useEffect(() => {
+    const blinkInterval = setInterval(() => {
+      setIsBlinking(true);
+      setTimeout(() => setIsBlinking(false), 200);
+    }, 3600);
+    return () => clearInterval(blinkInterval);
+  }, []);
+
+  const handlePortraitTap = () => {
+    // Spawn celebratory coin sparkle on click
+    const newSparkle = { id: Date.now(), x: (Math.random() - 0.5) * 40, y: -20 - Math.random() * 30 };
+    setSparkles(prev => [...prev.slice(-4), newSparkle]);
+    audio.playTone(580, 'sine', 0.08, 0.25);
+    if (onTap) onTap();
+  };
 
   return (
     <div 
-      onClick={onTap}
-      className={`relative flex items-center gap-3 bg-gradient-to-r from-amber-950/80 via-slate-900/90 to-slate-950/90 border-2 border-amber-500/50 rounded-2xl p-3 shadow-[0_10px_25px_rgba(0,0,0,0.8)] cursor-pointer select-none group transition-all hover:border-amber-400 ${className}`}
+      onClick={handlePortraitTap}
+      className={`relative flex items-center gap-3 bg-gradient-to-r from-[#2a1309] via-slate-900/95 to-slate-950/95 border-2 border-amber-500/70 rounded-2xl p-3 shadow-[0_10px_25px_rgba(0,0,0,0.8)] cursor-pointer select-none group transition-all hover:border-amber-400 ${className}`}
     >
-      {/* 3D Animated Merchant Sprite */}
-      <div className="relative w-16 h-16 shrink-0 flex items-center justify-center [perspective:600px]">
+      {/* 3D Animated Merchant Portrait with Candle Glow */}
+      <div className="relative w-16 h-16 shrink-0 flex items-center justify-center">
         {/* Glow & Aura */}
-        <div className="absolute inset-0 bg-amber-500/20 rounded-full blur-md animate-pulse" />
+        <div 
+          className="absolute inset-0 bg-amber-500/30 rounded-2xl blur-md transition-opacity duration-200"
+          style={{ opacity: flicker }}
+        />
         
-        {transparentSrc ? (
-          <motion.div
+        <div className="w-16 h-16 rounded-xl overflow-hidden border-2 border-amber-400 bg-slate-950 relative z-10 shadow">
+          <motion.img
+            src={merchantArtImg}
+            alt="Barnaby the Merchant"
+            referrerPolicy="no-referrer"
             animate={
-              mood === 'happy' || mood === 'taunt'
-                ? { y: [0, -8, 0], scale: [1, 1.15, 1], rotateZ: [-4, 4, 0] }
-                : { y: [-3, 3, -3] }
+              mood === 'give_item'
+                ? { scale: [1, 1.15, 1.06, 1], y: [0, -4, -2, 0], rotate: [0, 2, -1, 0] }
+                : mood === 'take_item'
+                ? { scale: [1, 1.12, 1.04, 1], y: [0, -3, -1, 0], rotate: [0, -2, 1, 0] }
+                : mood === 'happy' || mood === 'taunt'
+                ? { scale: [1, 1.1, 1], y: [0, -3, 0], rotate: [-2, 2, 0] }
+                : mood === 'talking'
+                ? { y: [0, -2, 1, 0], scale: [1, 1.04, 1] }
+                : { y: [-2, 2, -2] }
             }
-            transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-            className="w-full h-full transform-gpu relative z-10"
-            style={{
-              backgroundImage: `url(${transparentSrc})`,
-              backgroundSize: '400% 300%',
-              backgroundPosition: `${(frame / 3) * 100}% ${(currentRow / 2) * 100}%`,
-              imageRendering: 'pixelated',
-              transform: 'translateZ(20px)'
-            }}
+            transition={{ repeat: Infinity, duration: (mood === 'give_item' || mood === 'take_item') ? 1.2 : mood === 'idle' ? 2.8 : 1.2, ease: "easeInOut" }}
+            className={`w-full h-full object-cover object-top transition-all ${isBlinking ? 'brightness-90' : 'brightness-100'}`}
           />
-        ) : (
-          <div className="w-12 h-12 rounded-full bg-amber-600/40 animate-pulse flex items-center justify-center text-xl">
-            🧙‍♂️
-          </div>
-        )}
+
+          {/* Candle Warm Amber Overlay */}
+          <div 
+            className="absolute inset-0 bg-amber-500/10 pointer-events-none mix-blend-color-dodge"
+            style={{ opacity: flicker * 0.8 }}
+          />
+        </div>
+
+        {/* Floating Sparks on Click */}
+        {sparkles.map(s => (
+          <motion.div
+            key={s.id}
+            initial={{ opacity: 1, y: 0, scale: 0.5 }}
+            animate={{ opacity: 0, y: s.y, x: s.x, scale: 1.2 }}
+            transition={{ duration: 0.8, ease: "easeOut" }}
+            className="absolute z-30 pointer-events-none text-xs text-yellow-300 font-bold"
+          >
+            ✨
+          </motion.div>
+        ))}
 
         {/* Merchant Gold Pouch Badge */}
-        <div className="absolute -bottom-1 -right-1 z-20 bg-amber-500 text-black text-[9px] font-black px-1 rounded-full border border-black shadow-md flex items-center gap-0.5">
+        <div className="absolute -bottom-1 -right-1 z-20 bg-amber-500 text-black text-[9px] font-extrabold px-1.5 py-0.5 rounded-full border border-black shadow flex items-center gap-0.5">
           <span>💰</span> BARNABY
         </div>
       </div>
@@ -194,16 +142,19 @@ export const MerchantSprite: React.FC<MerchantSpriteProps> = ({
         <AnimatePresence mode="wait">
           <motion.div
             key={message}
-            initial={{ opacity: 0, x: -8, scale: 0.95 }}
+            initial={{ opacity: 0, x: -6, scale: 0.96 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
-            exit={{ opacity: 0, x: 8, scale: 0.95 }}
-            transition={{ duration: 0.2 }}
-            className="bg-black/60 border border-amber-400/40 rounded-xl p-2.5 text-xs text-amber-200 font-medium leading-snug shadow-inner"
+            exit={{ opacity: 0, x: 6, scale: 0.96 }}
+            transition={{ duration: 0.18 }}
+            className="bg-black/85 border border-amber-400/50 rounded-xl p-2.5 text-xs text-amber-100 font-medium leading-relaxed shadow-inner"
           >
-            <p className="line-clamp-3">"{message}"</p>
-            <span className="text-[9px] text-amber-400/60 font-pixel uppercase block mt-1">
-              Tap merchant for banter • Barnaby the Wandering Merchant
-            </span>
+            <p className="line-clamp-2 italic">"{message}"</p>
+            <div className="flex items-center justify-between mt-1 pt-1 border-t border-amber-500/20 text-[10px] text-amber-300/80 font-bold tracking-wide">
+              <span>Barnaby the Merchant</span>
+              <span className="text-amber-400/60 font-normal italic flex items-center gap-1">
+                <MessageCircle className="w-3 h-3" /> tap for banter
+              </span>
+            </div>
           </motion.div>
         </AnimatePresence>
       </div>

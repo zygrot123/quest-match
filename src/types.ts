@@ -1,6 +1,13 @@
 export type GemType = 'sword' | 'fire' | 'water' | 'earth' | 'heart' | 'light' | 'dark';
 
-export type SpecialGemType = 'bomb_3x3' | 'rainbow' | 'light_holy' | 'dark_void';
+export type SpecialGemType = 
+  | 'arrow_horizontal' 
+  | 'arrow_vertical' 
+  | 'bomb_cross' 
+  | 'bomb_3x3' 
+  | 'rainbow' 
+  | 'light_holy' 
+  | 'dark_void';
 
 export interface Gem {
   id: string;
@@ -120,6 +127,17 @@ export interface ChapterInfo {
   mobs: EnemyType[];
 }
 
+export type RuneSealType = 'arcane' | 'frost' | 'dragon' | 'relic';
+
+export interface RuneSeal {
+  id: string;
+  row: number;
+  col: number;
+  hp: number;        // Current HP (1 or 2)
+  maxHp: number;     // Initial HP (1 or 2)
+  type: RuneSealType;
+}
+
 export interface GameState {
   status: 'characterSelect' | 'storyIntro' | 'menu' | 'playing' | 'gameover' | 'victory' | 'store' | 'map' | 'rest' | 'shop' | 'bossIntro';
   heroGender: HeroGender;
@@ -140,6 +158,13 @@ export interface GameState {
   bossAbilityCooldown: number;
   bossStunTimer: number;
   
+  // Dungeon Arcane Rune Seals & Relic Nova
+  runeSeals: RuneSeal[];
+  totalSealsInStage: number;
+  cleansedSealsCount: number;
+  relicBurstCharge: number; // 0 to 100%
+  relicSteps: number;       // 0 to 50 moves/steps across stages
+
   // Roguelike elements
   mapNodes: MapNode[][]; // 2D array representing layers/choices
   currentLayer: number;
