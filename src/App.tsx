@@ -37,8 +37,21 @@ const getEnemyInfo = (type: EnemyType) => {
   }
 };
 
-const GEM_SIZE = 44;
+const MAX_GEM_SIZE = 44;
+// Board padding/margins to subtract from viewport when computing the max gem size that fits.
+const BOARD_HORIZONTAL_PADDING = 64; // outer card padding + backdrop padding (both sides)
+const BOARD_VERTICAL_RESERVED = 340; // space taken by header, HUD, boss area, bottom bar, etc.
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/** Computes a gem size that fits the current viewport, capped at MAX_GEM_SIZE. */
+const computeGemSize = () => {
+  if (typeof window === 'undefined') return MAX_GEM_SIZE;
+  const availableWidth = window.innerWidth - BOARD_HORIZONTAL_PADDING;
+  const availableHeight = window.innerHeight - BOARD_VERTICAL_RESERVED;
+  const sizeFromWidth = Math.floor(availableWidth / COLS);
+  const sizeFromHeight = Math.floor(availableHeight / ROWS);
+  return Math.max(24, Math.min(MAX_GEM_SIZE, sizeFromWidth, sizeFromHeight));
+};
 
 const GEM_ICON_COLORS: Record<GemType, string> = {
   sword: 'text-slate-300 drop-shadow-[0_0_8px_rgba(203,213,225,0.8)]',
@@ -84,6 +97,19 @@ export default function App() {
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [selectedEqModal, setSelectedEqModal] = useState<Equipment | null>(null);
 
+  // GEM_SIZE now scales to the actual device viewport instead of being a fixed
+  // pixel constant, so the board fits real phone screens instead of overflowing
+  // or looking oversized relative to everything else.
+  const [GEM_SIZE, setGemSize] = useState(computeGemSize);
+  useEffect(() => {
+    const handleResize = () => setGemSize(computeGemSize());
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);
 
   const gameStateRef = useRef(gameState);
   useEffect(() => {
@@ -923,7 +949,7 @@ export default function App() {
 
   return (
     <motion.div 
-      className="max-w-md mx-auto h-screen bg-slate-950 text-white overflow-hidden flex flex-col relative font-sans shadow-2xl select-none"
+      className="max-w-md mx-auto h-[100dvh] bg-slate-950 text-white overflow-hidden flex flex-col relative font-sans shadow-2xl select-none"
       animate={
         gameState.status === 'bossIntro' ? { x: [-15, 15, -10, 10, -5, 5, 0], y: [-10, 10, -8, 8, -4, 4, 0] } :
         (activeGimmick === 'golem' || activeGimmick === 'dragon' ? { x: [-10, 10, -10, 10, 0], y: [-5, 5, -5, 5, 0] } : { x: 0, y: 0 })

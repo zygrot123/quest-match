@@ -1,9 +1,19 @@
 @import "tailwindcss";
 
 @layer base {
+  html {
+    /* Prevent mobile browsers (esp. Android Chrome) from auto-inflating text
+       size on narrow viewports. Without this, text can render much larger
+       on a real phone than in desktop preview even though the CSS is identical. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
   body {
     font-family: 'VT323', monospace;
-    font-size: 1.25rem;
+    /* Standard mobile baseline. This was 1.25rem (20px), which is oversized
+       for a base font and made every unstyled/inherited text element render
+       ~25% larger than intended, on top of the text-inflation issue above. */
+    font-size: 1rem;
   }
 }
 
