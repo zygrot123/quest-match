@@ -1711,9 +1711,9 @@ export default function App() {
           </div>
 
           <div className="w-full shrink-0 flex flex-col items-center justify-center relative px-4 z-10">
-            <div className="backdrop-blur-xl bg-slate-950/80 border border-slate-800 rounded-3xl p-5 flex flex-col items-center justify-center relative w-full max-w-[340px] shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+            <div className="backdrop-blur-xl bg-slate-950/80 border border-slate-800 rounded-3xl p-3 flex flex-col items-center justify-center relative w-full max-w-[340px] shadow-[0_0_50px_rgba(0,0,0,0.8)]">
               {/* Card Header Badges */}
-              <div className="w-full flex items-center justify-between mb-1.5">
+              <div className="w-full flex items-center justify-between mb-1">
                 <span className={cn(
                   "text-[10px] font-bold px-2.5 py-1 rounded-md border uppercase tracking-widest shadow-sm",
                   getEnemyInfo(gameState.enemyType).isBoss 
@@ -1732,14 +1732,14 @@ export default function App() {
               </div>
 
               {/* Boss/Enemy Name Banner */}
-              <div className="w-full text-center py-1.5 my-1 bg-gradient-to-r from-red-950/50 via-slate-900/80 to-red-950/50 border-y border-red-500/30 rounded-lg">
-                <span className="text-lg font-pixel tracking-widest text-amber-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] uppercase">
+              <div className="w-full text-center py-1 my-0.5 bg-gradient-to-r from-red-950/50 via-slate-900/80 to-red-950/50 border-y border-red-500/30 rounded-lg">
+                <span className="text-base font-pixel tracking-widest text-amber-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] uppercase">
                   {getEnemyInfo(gameState.enemyType).name}
                 </span>
               </div>
               
               {/* Boss/Enemy Sprite Frame */}
-              <div className="w-full h-[180px] flex items-center justify-center relative my-1 rounded-2xl bg-slate-900/40 border border-white/10 shadow-inner overflow-visible">
+              <div className="w-full h-[110px] flex items-center justify-center relative my-1 rounded-2xl bg-slate-900/40 border border-white/10 shadow-inner overflow-visible">
                  <div className="flex items-center justify-center pointer-events-none w-full h-full">
                    <BossModel 
                      type={gameState.enemyType} 
