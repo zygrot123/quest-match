@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Heart, Coins, Play, RefreshCw, ShoppingCart, Crown, XCircle, Trophy, Skull, Map, Shield, Sword, Flame, Droplet, Leaf, Sparkles, Info, Package, Volume2, VolumeX } from 'lucide-react';
+import { motion, AnimatePresence, useAnimation } from 'motion/react';
+import { Heart, Coins, Play, RefreshCw, ShoppingCart, Crown, XCircle, Trophy, Skull, Map, Shield, Sword, Flame, Droplet, Leaf, Sparkles, Info, Package, Volume2, VolumeX, Lightbulb } from 'lucide-react';
 import { Gem, GameState, DamageNumber, GemType, MapNode, EquipmentSlot, Equipment, ShopItem, EnemyType, SpecialGemType } from './types';
-import { generateSolvableGrid, findMatches, analyzeMatches, isAdjacent, createRandomGem, findHint, getConnectedSameTypeCluster } from './gameLogic';
+import { generateSolvableGrid, findMatches, analyzeMatches, isAdjacent, createRandomGem, findHint, getConnectedSameTypeCluster, shuffleGems } from './gameLogic';
 import { generateMap, generateRandomEquipment, calculateTotalStats, getRarityColor, getRarityBadge, getItemPrice } from './roguelike';
 import { ROWS, COLS, MATCH_DELAY, DROP_DELAY, SWIPE_LIMIT } from './constants';
 import { GemIcon } from './components/GemIcon';
@@ -10,9 +10,16 @@ import { DamageOverlay } from './components/DamageOverlay';
 import { BossModel } from './components/BossModel';
 import { VFXCanvas, Particle, spawnExplosion, spawnFireEmbers, spawnWaterSplash, spawnEarthDust, spawnSwordSparks, spawnHeartAura, spawnElementalAura } from './components/VFXCanvas';
 import { InventoryModal } from './components/InventoryModal';
+import { MerchantSprite, MERCHANT_TAUNTS } from './components/MerchantSprite';
+import { MerchantShopView } from './components/MerchantShopView';
+import { QuestTipsModal } from './components/QuestTipsModal';
+import { HeroSelectModal } from './components/HeroSelectModal';
+import { MapTravelTransition } from './components/MapTravelTransition';
+import { CHAPTERS_DATA } from './data/chaptersData';
 import { audio } from './audio';
 import { useGameAudio } from './hooks/useGameAudio';
 import { cn } from './utils';
+import { Confetti } from './components/Confetti';
 
 import dragonBg from './assets/images/dragon_bg_1786210057193.jpg';
 import elfBg from './assets/images/elf_bg_1786210084496.jpg';
@@ -21,28 +28,45 @@ import golemBg from './assets/images/golem_bg_1786210071789.jpg';
 const getEnemyInfo = (type: EnemyType) => {
   switch (type) {
     case 'dragon':
-      return { name: 'ANCIENT DRAGON', isBoss: true, weak: 'water', weakText: 'Water', resist: 'fire', resistText: 'Fire', quote: '"Puny mortal! You shall burn in my flames!"' };
+      return { name: 'ANCIENT DRAGON', isBoss: true, weak: 'water', weakText: 'Water', resist: 'fire', resistText: 'Fire', quote: '"ROOOOAAAAR! Flame devour all!"' };
     case 'elf':
-      return { name: 'CORRUPT WOOD ELF', isBoss: true, weak: 'earth', weakText: 'Earth', resist: 'water', resistText: 'Water', quote: '"My magic is absolute. Prepare to meet your end."' };
+      return { name: 'CORRUPT WOOD ELF', isBoss: true, weak: 'earth', weakText: 'Earth', resist: 'water', resistText: 'Water', quote: '"The woodland breeze bends to my will."' };
     case 'golem':
       return { name: 'STONE GOLEM', isBoss: true, weak: 'fire', weakText: 'Fire', resist: 'earth', resistText: 'Earth/Sword', quote: '"ROAR! STONE CRUSH WEAK FLESH!"' };
     case 'goblin':
       return { name: 'CAVE GOBLIN', isBoss: false, weak: 'fire', weakText: 'Fire', resist: 'earth', resistText: 'Earth', quote: '"Hand over your shiny gold, traveler!"' };
     case 'slime':
-      return { name: 'CRYSTAL SLIME', isBoss: false, weak: 'earth', weakText: 'Earth', resist: 'water', resistText: 'Water', quote: '"*Bouncy gloop noises intensify!*"' };
+      return { name: 'CRYSTAL SLIME', isBoss: false, weak: 'earth', weakText: 'Earth', resist: 'water', resistText: 'Water', quote: '"*Bouncy gloop squish noises!*"' };
     case 'imp':
       return { name: 'INFERNO IMP', isBoss: false, weak: 'water', weakText: 'Water', resist: 'fire', resistText: 'Fire', quote: '"Hehehe! Let us ignite your soul!"' };
     case 'skeleton':
       return { name: 'SKELETAL GUARD', isBoss: false, weak: 'fire', weakText: 'Fire', resist: 'water', resistText: 'Water', quote: '"None shall pass through this dungeon..."' };
+    case 'minotaur':
+      return { name: 'MINOTAUR WARLORD', isBoss: true, weak: 'earth', weakText: 'Earth', resist: 'sword', resistText: 'Sword', quote: '"MUUUUU! MY AXE CLEAVES ALL FOOLS!"' };
+    case 'mummy':
+      return { name: 'SUN PHARAOH MUMMY', isBoss: false, weak: 'fire', weakText: 'Fire', resist: 'water', resistText: 'Water', quote: '"The sands of time bind your tomb..."' };
+    case 'specter':
+      return { name: 'VOID SPECTER', isBoss: false, weak: 'light', weakText: 'Light', resist: 'dark', resistText: 'Dark', quote: '"Your soul bleeds dark void..."' };
+    case 'kraken':
+      return { name: 'ABYSSAL KRAKEN', isBoss: true, weak: 'fire', weakText: 'Fire', resist: 'water', resistText: 'Water', quote: '"SKREEEEE! THE TIDAL DEPTHS DEVOUR ALL!"' };
+    case 'phoenix':
+      return { name: 'SOLAR PHOENIX', isBoss: true, weak: 'water', weakText: 'Water', resist: 'fire', resistText: 'Fire', quote: '"REBIRTH IN ETERNAL CELESTIAL EMBER!"' };
+    case 'gargoyle':
+      return { name: 'STONE GARGOYLE', isBoss: false, weak: 'earth', weakText: 'Earth', resist: 'sword', resistText: 'Sword', quote: '"STONE SENTINEL AWAKENS!"' };
+    case 'vampire':
+      return { name: 'CRIMSON VAMPIRE LORD', isBoss: true, weak: 'light', weakText: 'Light', resist: 'dark', resistText: 'Dark', quote: '"Your blood smells divine, mortal..."' };
+    case 'hydra':
+      return { name: 'SEVEN-HEADED HYDRA', isBoss: true, weak: 'fire', weakText: 'Fire', resist: 'water', resistText: 'Water', quote: '"CUT ONE HEAD, TWO MORE SHALL RISE!"' };
+    default:
+      return { name: 'UNKNOWN MONSTER', isBoss: false, weak: 'fire', weakText: 'Fire', resist: 'water', resistText: 'Water', quote: '"Grrr!"' };
   }
 };
 
-const MAX_GEM_SIZE = 60;
-const MIN_GEM_SIZE = 26;
+const MAX_GEM_SIZE = 56;
+const MIN_GEM_SIZE = 40;
 // Padding (px) inside the board's wrapper elements, subtracted from the measured
 // container box to get the space actually usable by the grid itself.
-const BOARD_WRAPPER_PADDING = 16 * 2; // backdrop wrapper's p-4 (left+right, top+bottom)
-const BOARD_INNER_PADDING = 8; // gem-grid-container's own "+8" sizing
+const BOARD_WRAPPER_PADDING = 20; 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 /** Names of every item the player currently owns (bag + equipped), used to steer new drops away from exact repeats. */
@@ -54,14 +78,12 @@ const getOwnedItemNames = (state: GameState): Set<string> => {
 };
 
 /**
- * Computes the largest gem size that fits inside a measured container box,
- * instead of guessing how much vertical space the rest of the UI takes up.
- * This stays correct across screens (boss battles, different HUD heights),
- * orientations, and devices, since it's based on real measured layout space.
+ * Computes the optimal gem size that fills the available viewport flex container
+ * without collapsing into a feedback loop or leaving huge empty margins.
  */
 const computeGemSizeForContainer = (containerWidth: number, containerHeight: number) => {
-  const usableWidth = containerWidth - BOARD_WRAPPER_PADDING - BOARD_INNER_PADDING;
-  const usableHeight = containerHeight - BOARD_WRAPPER_PADDING - BOARD_INNER_PADDING;
+  const usableWidth = Math.max(280, containerWidth - BOARD_WRAPPER_PADDING);
+  const usableHeight = Math.max(280, containerHeight - BOARD_WRAPPER_PADDING);
   const sizeFromWidth = Math.floor(usableWidth / COLS);
   const sizeFromHeight = Math.floor(usableHeight / ROWS);
   return Math.max(MIN_GEM_SIZE, Math.min(MAX_GEM_SIZE, sizeFromWidth, sizeFromHeight));
@@ -75,6 +97,159 @@ const GEM_ICON_COLORS: Record<GemType, string> = {
   heart: 'text-pink-400 drop-shadow-[0_0_8px_rgba(244,114,182,0.8)]',
   light: 'text-yellow-300 drop-shadow-[0_0_8px_rgba(253,224,71,0.9)]',
   dark: 'text-purple-400 drop-shadow-[0_0_8px_rgba(168,85,247,0.9)]',
+};
+
+const GEM_HINT_CLASSES: Record<GemType, string> = {
+  sword: 'border-slate-300 ring-2 ring-slate-300/90 shadow-[0_0_18px_rgba(203,213,225,0.9)] animate-pulse scale-105 z-10',
+  fire: 'border-red-400 ring-2 ring-red-400/90 shadow-[0_0_18px_rgba(248,113,113,0.9)] animate-pulse scale-105 z-10',
+  water: 'border-blue-400 ring-2 ring-blue-400/90 shadow-[0_0_18px_rgba(96,165,250,0.9)] animate-pulse scale-105 z-10',
+  earth: 'border-emerald-400 ring-2 ring-emerald-400/90 shadow-[0_0_18px_rgba(52,211,153,0.9)] animate-pulse scale-105 z-10',
+  heart: 'border-pink-400 ring-2 ring-pink-400/90 shadow-[0_0_18px_rgba(244,114,182,0.9)] animate-pulse scale-105 z-10',
+  light: 'border-yellow-300 ring-2 ring-yellow-300/90 shadow-[0_0_18px_rgba(253,224,71,0.9)] animate-pulse scale-105 z-10',
+  dark: 'border-purple-400 ring-2 ring-purple-400/90 shadow-[0_0_18px_rgba(192,132,252,0.9)] animate-pulse scale-105 z-10',
+};
+
+const GEM_3D_BACKGROUNDS: Record<GemType, string> = {
+  sword: 'bg-gradient-to-b from-slate-600 via-slate-700 to-slate-900 border-slate-300/80 shadow-[0_4px_8px_rgba(0,0,0,0.6),inset_0_1px_1px_rgba(255,255,255,0.7)]',
+  fire: 'bg-gradient-to-b from-red-600 via-red-700 to-amber-950 border-red-300/80 shadow-[0_4px_8px_rgba(239,68,68,0.5),inset_0_1px_1px_rgba(255,255,255,0.7)]',
+  water: 'bg-gradient-to-b from-blue-600 via-cyan-700 to-blue-950 border-cyan-300/80 shadow-[0_4px_8px_rgba(56,189,248,0.5),inset_0_1px_1px_rgba(255,255,255,0.7)]',
+  earth: 'bg-gradient-to-b from-emerald-600 via-emerald-700 to-emerald-950 border-emerald-300/80 shadow-[0_4px_8px_rgba(16,185,129,0.5),inset_0_1px_1px_rgba(255,255,255,0.7)]',
+  heart: 'bg-gradient-to-b from-pink-600 via-rose-700 to-pink-950 border-pink-300/80 shadow-[0_4px_8px_rgba(244,114,182,0.5),inset_0_1px_1px_rgba(255,255,255,0.7)]',
+  light: 'bg-gradient-to-b from-amber-500 via-yellow-600 to-amber-950 border-yellow-200/80 shadow-[0_4px_8px_rgba(250,204,21,0.5),inset_0_1px_1px_rgba(255,255,255,0.7)]',
+  dark: 'bg-gradient-to-b from-purple-600 via-indigo-700 to-purple-950 border-purple-300/80 shadow-[0_4px_8px_rgba(168,85,247,0.5),inset_0_1px_1px_rgba(255,255,255,0.7)]',
+};
+
+const BOARD_THEME_STYLES: Record<string, { wrapper: string; socket: string; corner: string }> = {
+  emerald: {
+    wrapper: 'border-emerald-500/80 shadow-[0_0_45px_rgba(16,185,129,0.4)] bg-gradient-to-b from-emerald-950/95 via-slate-950 to-emerald-950/95',
+    socket: 'bg-emerald-950/90 border-emerald-500/20 shadow-[inset_0_3px_6px_rgba(0,0,0,0.95)]',
+    corner: '🌿',
+  },
+  lava: {
+    wrapper: 'border-red-500/80 shadow-[0_0_45px_rgba(239,68,68,0.4)] bg-gradient-to-b from-red-950/95 via-slate-950 to-orange-950/95',
+    socket: 'bg-red-950/90 border-red-500/20 shadow-[inset_0_3px_6px_rgba(0,0,0,0.95)]',
+    corner: '🔥',
+  },
+  gothic: {
+    wrapper: 'border-purple-500/80 shadow-[0_0_45px_rgba(168,85,247,0.4)] bg-gradient-to-b from-purple-950/95 via-slate-950 to-slate-900/95',
+    socket: 'bg-purple-950/90 border-purple-500/20 shadow-[inset_0_3px_6px_rgba(0,0,0,0.95)]',
+    corner: '💀',
+  },
+  ice: {
+    wrapper: 'border-cyan-400/80 shadow-[0_0_45px_rgba(56,189,248,0.4)] bg-gradient-to-b from-cyan-950/95 via-slate-950 to-blue-950/95',
+    socket: 'bg-cyan-950/90 border-cyan-500/20 shadow-[inset_0_3px_6px_rgba(0,0,0,0.95)]',
+    corner: '❄️',
+  },
+  void: {
+    wrapper: 'border-indigo-500/80 shadow-[0_0_45px_rgba(99,102,241,0.4)] bg-gradient-to-b from-indigo-950/95 via-slate-950 to-purple-950/95',
+    socket: 'bg-indigo-950/90 border-indigo-500/20 shadow-[inset_0_3px_6px_rgba(0,0,0,0.95)]',
+    corner: '🔮',
+  },
+  golden: {
+    wrapper: 'border-amber-400/80 shadow-[0_0_45px_rgba(250,204,21,0.4)] bg-gradient-to-b from-amber-950/95 via-slate-950 to-yellow-950/95',
+    socket: 'bg-amber-950/90 border-amber-500/20 shadow-[inset_0_3px_6px_rgba(0,0,0,0.95)]',
+    corner: '👑',
+  },
+  mystic: {
+    wrapper: 'border-pink-500/80 shadow-[0_0_45px_rgba(236,72,153,0.4)] bg-gradient-to-b from-pink-950/95 via-slate-950 to-fuchsia-950/95',
+    socket: 'bg-pink-950/90 border-pink-500/20 shadow-[inset_0_3px_6px_rgba(0,0,0,0.95)]',
+    corner: '✨',
+  },
+  abyssal: {
+    wrapper: 'border-blue-500/80 shadow-[0_0_45px_rgba(59,130,246,0.4)] bg-gradient-to-b from-blue-950/95 via-slate-950 to-teal-950/95',
+    socket: 'bg-blue-950/90 border-blue-500/20 shadow-[inset_0_3px_6px_rgba(0,0,0,0.95)]',
+    corner: '🌊',
+  },
+};
+
+const getComboTierInfo = (combo: number) => {
+  if (combo >= 6) {
+    return {
+      title: 'GODLIKE CASCADE! 🌌',
+      icon: '💥',
+      bgGradient: 'from-fuchsia-950/95 via-purple-900/95 to-amber-950/95',
+      borderColor: 'border-fuchsia-400/90 shadow-[0_0_30px_rgba(217,70,239,0.9)]',
+      textColor: 'text-amber-300 drop-shadow-[0_0_12px_rgba(251,191,36,0.9)]',
+      badgeColor: 'bg-fuchsia-950/80 border-fuchsia-400/60 text-fuchsia-200',
+      gaugeGradient: 'from-pink-500 via-purple-500 to-amber-400',
+    };
+  }
+  if (combo >= 4) {
+    return {
+      title: 'SUPER COMBO! 🔥',
+      icon: '🔥',
+      bgGradient: 'from-red-950/95 via-orange-950/95 to-amber-950/95',
+      borderColor: 'border-red-400/90 shadow-[0_0_25px_rgba(239,68,68,0.8)]',
+      textColor: 'text-orange-300 drop-shadow-[0_0_10px_rgba(249,115,22,0.9)]',
+      badgeColor: 'bg-red-950/80 border-red-500/60 text-red-200',
+      gaugeGradient: 'from-red-500 via-orange-400 to-yellow-300',
+    };
+  }
+  if (combo >= 2) {
+    return {
+      title: 'TRIPLE STRIKE ⚡',
+      icon: '⚡',
+      bgGradient: 'from-amber-950/95 via-slate-900/95 to-orange-950/95',
+      borderColor: 'border-amber-400/90 shadow-[0_0_20px_rgba(245,158,11,0.7)]',
+      textColor: 'text-amber-300 drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]',
+      badgeColor: 'bg-amber-950/80 border-amber-500/50 text-amber-200',
+      gaugeGradient: 'from-amber-400 via-orange-400 to-red-500',
+    };
+  }
+  return {
+    title: 'CHAIN MATCH ✨',
+    icon: '✨',
+    bgGradient: 'from-amber-950/90 via-slate-900/90 to-amber-950/90',
+    borderColor: 'border-amber-400/70 shadow-[0_0_15px_rgba(245,158,11,0.5)]',
+    textColor: 'text-amber-200',
+    badgeColor: 'bg-amber-950/70 border-amber-500/40 text-amber-200',
+    gaugeGradient: 'from-amber-400 to-amber-600',
+  };
+};
+
+const generateChapterMapNodes = (chapterNum: number): MapNode[][] => {
+  const chapterInfo = CHAPTERS_DATA[(chapterNum - 1) % CHAPTERS_DATA.length];
+  const layers: MapNode[][] = [];
+  
+  for (let s = 1; s <= 10; s++) {
+    let node: MapNode;
+    if (s === 5) {
+      node = {
+        id: `c${chapterNum}-s5`,
+        type: 'combat',
+        isBoss: true,
+        isMiniBoss: true,
+        enemyType: chapterInfo.miniBossEnemy,
+      };
+    } else if (s === 6) {
+      node = {
+        id: `c${chapterNum}-s6`,
+        type: 'rest',
+      };
+    } else if (s === 7) {
+      node = {
+        id: `c${chapterNum}-s7`,
+        type: 'shop',
+      };
+    } else if (s === 10) {
+      node = {
+        id: `c${chapterNum}-s10`,
+        type: 'combat',
+        isBoss: true,
+        enemyType: chapterInfo.bossEnemy,
+      };
+    } else {
+      const randomMob = chapterInfo.mobs[Math.floor(Math.random() * chapterInfo.mobs.length)];
+      node = {
+        id: `c${chapterNum}-s${s}`,
+        type: 'combat',
+        isBoss: false,
+        enemyType: randomMob,
+      };
+    }
+    layers.push([node]);
+  }
+  return layers;
 };
 
 export default function App() {
@@ -109,16 +284,23 @@ export default function App() {
   });
 
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
+  const [isTipsOpen, setIsTipsOpen] = useState(false);
   const [selectedEqModal, setSelectedEqModal] = useState<Equipment | null>(null);
+  const [travelingNode, setTravelingNode] = useState<MapNode | null>(null);
+
+  const [shopMerchantMsg, setShopMerchantMsg] = useState<string>(
+    "Welcome to Barnaby's Shop! Browse my fine collection of deadly armors and enchanted blades!"
+  );
+  const [shopMerchantMood, setShopMerchantMood] = useState<'idle' | 'happy' | 'taunt' | 'surprised'>('idle');
 
   // GEM_SIZE now scales to whatever space Flexbox actually gives the board
   // wrapper (boardWrapperRef), rather than being a fixed pixel constant or a
   // guessed "reserved space" number. This stays correct even when the HUD
   // above the board (boss card, HP bars, etc.) varies in height between screens.
-  const [GEM_SIZE, setGemSize] = useState(MAX_GEM_SIZE);
-  const boardWrapperRef = useRef<HTMLDivElement>(null);
+  const [GEM_SIZE, setGemSize] = useState(48);
+  const boardContainerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const el = boardWrapperRef.current;
+    const el = boardContainerRef.current;
     if (!el) return;
     const recompute = () => {
       const { width, height } = el.getBoundingClientRect();
@@ -129,9 +311,11 @@ export default function App() {
     recompute();
     const observer = new ResizeObserver(recompute);
     observer.observe(el);
+    window.addEventListener('resize', recompute);
     window.addEventListener('orientationchange', recompute);
     return () => {
       observer.disconnect();
+      window.removeEventListener('resize', recompute);
       window.removeEventListener('orientationchange', recompute);
     };
   }, [gameState.status]);
@@ -147,7 +331,7 @@ export default function App() {
 
   // Idle hint: if the player hasn't made a move in a while, gently glow a
   // valid 3-match so they can find one without hunting the whole board.
-  const IDLE_HINT_DELAY = 6000; // ms of inactivity before showing a hint
+  const IDLE_HINT_DELAY = 5000; // ms of inactivity before showing a hint
   const [hintGemIds, setHintGemIds] = useState<string[]>([]);
   useEffect(() => {
     setHintGemIds([]); // any board/selection change clears the previous hint
@@ -206,6 +390,7 @@ export default function App() {
     playCritSFX,
     playRainbowSFX,
     playSpecialCreatedSFX,
+    playChainPulseSFX,
     toggleBGM,
     startBGM,
     stopBGM,
@@ -214,6 +399,41 @@ export default function App() {
 
   const lastSwappedPosRef = useRef<{ row: number; col: number } | undefined>(undefined);
   const [isMusicPlaying, setIsMusicPlaying] = useState(false);
+
+  const chainPulseControls = useAnimation();
+  
+  useEffect(() => {
+    if (chainCombo > 0) {
+      playChainPulseSFX();
+      const isHigh = chainCombo >= 3;
+      const isUltra = chainCombo >= 5;
+
+      chainPulseControls.start({
+        scale: isUltra ? [1, 1.35, 0.9, 1.15, 1] : isHigh ? [1, 1.25, 0.95, 1.1, 1] : [1, 1.18, 0.95, 1.05, 1],
+        rotate: isUltra ? [0, -10, 10, -6, 4, 0] : isHigh ? [0, -7, 7, -3, 0] : [0, -4, 4, 0],
+        x: isUltra ? [0, -8, 8, -4, 4, 0] : isHigh ? [0, -5, 5, -2, 0] : [0, -3, 3, 0],
+        y: isUltra ? [0, -5, 5, -2, 0] : [0, -3, 3, 0],
+        boxShadow: isUltra
+          ? [
+              "0 0 25px rgba(236,72,153,0.8)",
+              "0 0 60px rgba(251,191,36,1), 0 0 30px rgba(239,68,68,0.9)",
+              "0 0 25px rgba(236,72,153,0.8)"
+            ]
+          : isHigh
+          ? [
+              "0 0 25px rgba(239,68,68,0.8)",
+              "0 0 50px rgba(249,115,22,1)",
+              "0 0 25px rgba(239,68,68,0.8)"
+            ]
+          : [
+              "0 0 20px rgba(245,158,11,0.7)",
+              "0 0 40px rgba(251,191,36,1)",
+              "0 0 20px rgba(245,158,11,0.7)"
+            ],
+        transition: { duration: 0.45, ease: "easeOut" }
+      });
+    }
+  }, [chainCombo, playChainPulseSFX, chainPulseControls]);
 
   const addDamageNumber = (amount: number | string, type: DamageNumber['type'], x: number, y: number) => {
     const id = Math.random().toString();
@@ -275,11 +495,9 @@ export default function App() {
             if (g.special) explodeQueue.push(g);
           });
         } else if (g1.special === 'bomb_3x3' && g2.special === 'bomb_3x3') {
-          // Mega Bomb! Two bombs combine, but still only claim the connected
-          // patch of gems sharing the destination bomb's element — a same-gem
-          // area clear, not an indiscriminate nuke of whatever else is nearby.
+          // Mega Bomb! Two bombs combine to create a massive 5x5 explosion
           hasBomb = true;
-          getConnectedSameTypeCluster(currentGems, g2).forEach(g => {
+          currentGems.filter(g => Math.abs(g.row - g2.row) <= 2 && Math.abs(g.col - g2.col) <= 2).forEach(g => {
             finalMatchedIds.add(g.id);
             if (g.special) explodeQueue.push(g);
           });
@@ -343,11 +561,9 @@ export default function App() {
           }
         });
       } else if (g.special === 'bomb_3x3') {
-        // Only claim the connected patch of gems sharing the bomb's own
-        // element — a same-gem area clear, not an indiscriminate nuke of
-        // whatever else happens to be sitting nearby.
+        // Explodes in a 3x3 square radius
         hasBomb = true;
-        getConnectedSameTypeCluster(currentGems, g).forEach(other => {
+        currentGems.filter(other => Math.abs(other.row - g.row) <= 1 && Math.abs(other.col - g.col) <= 1).forEach(other => {
           finalMatchedIds.add(other.id);
           if (other.special && !processedSpecialIds.has(other.id)) {
             explodeQueue.push(other);
@@ -370,7 +586,16 @@ export default function App() {
       // instead of leaving them stuck on a dead board.
       if (!findHint(currentGems)) {
         addDamageNumber('No moves left — reshuffling!', 'combo', window.innerWidth / 2, window.innerHeight / 2);
-        setGems(generateSolvableGrid());
+        
+        // Clear board to trigger exit animations
+        setGems([]);
+        
+        // Wait for exit animations to complete before showing the shuffled board
+        setTimeout(() => {
+          setGems(shuffleGems(currentGems));
+          setIsProcessing(false);
+        }, 500);
+        return;
       }
       setIsProcessing(false);
       return;
@@ -608,12 +833,26 @@ export default function App() {
         nextGameState.currentLayer += 1;
 
         if (nextGameState.currentLayer >= nextGameState.mapNodes.length) {
-          nextGameState.status = 'victory';
-          stopBGM();
-          setIsMusicPlaying(false);
-          playVictorySFX();
+          const currentChapter = nextGameState.chapter || 1;
+          if (currentChapter < 20) {
+            nextGameState.chapter = currentChapter + 1;
+            nextGameState.stage = 1;
+            nextGameState.currentLayer = 0;
+            nextGameState.mapNodes = generateChapterMapNodes(currentChapter + 1);
+            nextGameState.status = 'map';
+            addDamageNumber(`CHAPTER ${currentChapter} CONQUERED!`, 'combo', window.innerWidth / 2, 180);
+            stopBGM();
+            setIsMusicPlaying(false);
+            playVictorySFX();
+          } else {
+            nextGameState.status = 'victory';
+            stopBGM();
+            setIsMusicPlaying(false);
+            playVictorySFX();
+          }
         } else {
           nextGameState.status = 'map';
+          nextGameState.stage = nextGameState.currentLayer + 1;
 
           // Equipment drop rate: 30% for minions, 100% for bosses
           const dropChance = isBossEnemy ? 1.0 : 0.30;
@@ -700,7 +939,9 @@ export default function App() {
     await sleep(MATCH_DELAY);
 
     const matchedIds = findMatches(swappedGems);
-    if (matchedIds.size > 0 || gemA.special || gemB.special) {
+    const isSpecialCombo = (gemA.special && gemB.special) || gemA.special === 'rainbow' || gemB.special === 'rainbow';
+    
+    if (matchedIds.size > 0 || isSpecialCombo) {
       setGameState(prev => ({ ...prev, wrongSwipes: 0 }));
       const g1Swapped = swappedGems.find(g => g.id === gemA.id)!;
       const g2Swapped = swappedGems.find(g => g.id === gemB.id)!;
@@ -913,25 +1154,29 @@ export default function App() {
     setChainTimer(0);
     stopBGM();
     setIsMusicPlaying(false);
+    const chapterNum = gameState.chapter || 1;
     setGameState(prev => ({
       ...prev,
       status: 'map',
-      level: 1,
-      mapNodes: generateMap(10), // 10 layers
+      chapter: chapterNum,
+      stage: 1,
+      level: chapterNum,
+      mapNodes: generateChapterMapNodes(chapterNum),
       currentLayer: 0,
       playerHp: prev.stats.baseMaxHp,
       playerMaxHp: prev.stats.baseMaxHp,
     }));
   };
 
-  const selectNode = (node: MapNode) => {
+  const executeNodeTransition = (node: MapNode) => {
     setChainCombo(0);
     setChainTimer(0);
     if (node.type === 'combat') {
       const isBoss = node.isBoss || gameState.currentLayer === gameState.mapNodes.length - 1;
+      const chFactor = (gameState.chapter || 1);
       const enemyMaxHp = isBoss 
-        ? 1200 + (gameState.currentLayer * 220) + (gameState.level * 150)
-        : 380 + (gameState.currentLayer * 60) + (gameState.level * 40);
+        ? 800 + (chFactor * 250) + (gameState.currentLayer * 120)
+        : 280 + (chFactor * 80) + (gameState.currentLayer * 40);
 
       startBGM();
       setIsMusicPlaying(true);
@@ -957,13 +1202,17 @@ export default function App() {
       setIsMusicPlaying(false);
       const ownedNames = getOwnedItemNames(gameState);
       const items: ShopItem[] = [1, 2, 3].map(() => {
-        const eq = generateRandomEquipment(gameState.level + gameState.currentLayer, undefined, false, ownedNames);
-        ownedNames.add(eq.name); // also avoid repeating a name within the same shop's 3 offers
+        const eq = generateRandomEquipment((gameState.chapter || 1) + gameState.currentLayer, undefined, false, ownedNames);
+        ownedNames.add(eq.name);
         const price = getItemPrice(eq);
         return { equipment: eq, price, sold: false };
       });
       setGameState(prev => ({ ...prev, status: 'shop', shopItems: items }));
     }
+  };
+
+  const selectNode = (node: MapNode) => {
+    setTravelingNode(node);
   };
 
 
@@ -1180,7 +1429,7 @@ export default function App() {
           </p>
           
           <button 
-            onClick={startRun}
+            onClick={() => setGameState(prev => ({ ...prev, status: 'characterSelect' }))}
             className="w-full py-5 bg-gradient-to-r from-red-700/80 to-red-900/80 hover:from-red-600 hover:to-red-800 border border-red-500/50 rounded-2xl font-pixel text-[12px] transition-all flex items-center justify-center gap-3 mb-4 shadow-[0_0_20px_rgba(220,38,38,0.3)] hover:shadow-[0_0_30px_rgba(220,38,38,0.5)] transform hover:scale-[1.02]"
           >
             <Play fill="currentColor" className="w-5 h-5" /> BEGIN QUEST
@@ -1194,7 +1443,47 @@ export default function App() {
         </div>
       )}
 
-      {/* MAP SCREEN */}
+      {/* CHARACTER SELECTION & STORY MODAL */}
+      {gameState.status === 'characterSelect' && (
+        <HeroSelectModal
+          onSelectHero={(hero) => {
+            const chNum = 1;
+            const newMaxHp = gameState.stats.baseMaxHp + (hero.stats.hpBonus || 0);
+            setGameState(prev => ({
+              ...prev,
+              heroName: hero.name,
+              heroGender: hero.gender,
+              stats: {
+                ...prev.stats,
+                baseAttack: prev.stats.baseAttack + (hero.stats.atkBonus || 0),
+                baseMaxHp: newMaxHp,
+              },
+              chapter: chNum,
+              stage: 1,
+              status: 'map',
+              mapNodes: generateChapterMapNodes(chNum),
+              currentLayer: 0,
+              playerHp: newMaxHp,
+              playerMaxHp: newMaxHp,
+            }));
+          }}
+        />
+      )}
+
+      {/* MAP TRAVEL PAGE TURN TRANSITION */}
+      {travelingNode && (
+        <MapTravelTransition
+          targetNode={travelingNode}
+          chapter={gameState.chapter || 1}
+          stage={gameState.currentLayer + 1}
+          heroName={gameState.heroName}
+          onComplete={() => {
+            const node = travelingNode;
+            setTravelingNode(null);
+            executeNodeTransition(node);
+          }}
+        />
+      )}
       {gameState.status === 'map' && (
         <div className="flex-1 flex flex-col p-6 z-10 relative overflow-hidden bg-slate-950">
           {/* Background Grid Pattern */}
@@ -1206,12 +1495,28 @@ export default function App() {
             }} 
           />
           
-          <div className="flex items-center justify-between mb-4 backdrop-blur-md bg-white/5 border border-white/10 rounded-3xl p-4 shadow-lg z-20">
-            <h2 className="text-2xl font-black font-pixel bg-gradient-to-r from-white to-white/50 bg-clip-text text-transparent">CHOOSE PATH</h2>
-            <div className="flex items-center gap-4 text-xs font-bold">
-               <span className="flex items-center gap-1 text-red-400"><Heart className="w-4 h-4" /> {gameState.playerHp}/{calculateTotalStats(gameState.stats, gameState.equipment).maxHp}</span>
-               <span className="flex items-center gap-1 text-yellow-400"><Coins className="w-4 h-4" /> {gameState.gold}</span>
+          {/* Chapter & Hero Header Banner */}
+          <div className="flex flex-col gap-1 mb-4 backdrop-blur-md bg-white/5 border border-amber-500/30 rounded-3xl p-4 shadow-lg z-20">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-pixel uppercase tracking-widest text-amber-400 block">
+                  Chapter {gameState.chapter || 1} / 20
+                </span>
+                <h2 className="text-base font-black font-pixel text-amber-200">
+                  {CHAPTERS_DATA[(gameState.chapter || 1) - 1]?.title.toUpperCase() || 'QUEST MAP'}
+                </h2>
+              </div>
+              <div className="flex items-center gap-3 text-xs font-bold">
+                 <span className="flex items-center gap-1 text-red-400"><Heart className="w-4 h-4" /> {gameState.playerHp}/{calculateTotalStats(gameState.stats, gameState.equipment).maxHp}</span>
+                 <span className="flex items-center gap-1 text-yellow-400"><Coins className="w-4 h-4" /> {gameState.gold}</span>
+              </div>
             </div>
+            {gameState.heroName && (
+              <div className="text-[10px] text-slate-400 font-pixel flex items-center gap-2 border-t border-white/5 pt-1.5 mt-1">
+                <span>Hero: <strong className="text-amber-300">{gameState.heroName}</strong> ({gameState.heroGender})</span>
+                <span>• Stage {gameState.currentLayer + 1} of 10</span>
+              </div>
+            )}
           </div>
           
           <div className="flex-1 overflow-y-auto flex flex-col-reverse items-center justify-start pb-32 pt-10 px-2 relative scrollbar-hide z-10">
@@ -1405,123 +1710,22 @@ export default function App() {
 
       {/* ROGUELIKE SHOP SCREEN */}
       {gameState.status === 'shop' && (
-        <div className="flex-1 flex flex-col p-6 z-10 relative">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-900/20 via-slate-950 to-slate-950 -z-10" />
-          <div className="flex items-center justify-between mb-6 backdrop-blur-md bg-white/5 border border-white/10 rounded-3xl p-4 shadow-lg">
-            <div>
-              <h2 className="text-2xl font-black">MERCHANT SHOP</h2>
-              <p className="text-xs text-slate-400">Upgrade gear & elemental power</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsInventoryOpen(true)}
-                className="px-3 py-1.5 rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-transform active:scale-95"
-              >
-                <Package className="w-4 h-4 text-amber-400" />
-                <span>Bag ({gameState.inventory.length})</span>
-              </button>
-              <div className="flex items-center gap-1.5 bg-yellow-950/80 border border-yellow-500/40 px-3 py-1.5 rounded-2xl text-yellow-300 font-extrabold text-sm">
-                <Coins className="w-4 h-4 text-yellow-400" /> {gameState.gold}G
-              </div>
-            </div>
-          </div>
-          
-          <div className="flex-1 flex flex-col gap-3.5 overflow-y-auto">
-            {gameState.shopItems.map((item, idx) => {
-               const eq = item.equipment;
-               return (
-                 <div key={idx} className={cn("backdrop-blur-md border p-3.5 rounded-2xl flex items-center justify-between gap-3 transition-all", getRarityColor(eq.rarity))}>
-                    <div className="flex items-center gap-3">
-                       <div className="w-14 h-14 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center text-3xl shrink-0 relative">
-                          {eq.icon}
-                       </div>
-                       <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                             <span className="font-extrabold text-sm text-white">{eq.name}</span>
-                             <span className={cn("text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider", getRarityBadge(eq.rarity))}>
-                               {eq.rarity}
-                             </span>
-                          </div>
-                          
-                          {/* Stats Row */}
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-white/80 mt-1 font-semibold">
-                            {eq.stats.attack ? <span className="text-red-300">ATK +{eq.stats.attack}</span> : null}
-                            {eq.stats.defense ? <span className="text-blue-300">DEF +{eq.stats.defense}</span> : null}
-                            {eq.stats.maxHp ? <span className="text-pink-300">HP +{eq.stats.maxHp}</span> : null}
-                            {eq.stats.fireDmg ? <span className="text-red-400">🔥 Fire +{eq.stats.fireDmg}</span> : null}
-                            {eq.stats.waterDmg ? <span className="text-blue-400">💧 Water +{eq.stats.waterDmg}</span> : null}
-                            {eq.stats.earthDmg ? <span className="text-emerald-400">🌿 Earth +{eq.stats.earthDmg}</span> : null}
-                            {eq.stats.lightDmg ? <span className="text-yellow-400">☀️ Light +{eq.stats.lightDmg}</span> : null}
-                            {eq.stats.darkDmg ? <span className="text-purple-400">🌙 Dark +{eq.stats.darkDmg}</span> : null}
-                            {eq.stats.critChance ? <span className="text-red-400">🎯 Crit Rate +{eq.stats.critChance}%</span> : null}
-                            {eq.stats.critDmg ? <span className="text-orange-400">💥 Crit DMG +{eq.stats.critDmg}%</span> : null}
-                          </div>
-
-                          {/* Passive Effect */}
-                          {eq.passive && (
-                            <div className="text-[10px] text-amber-300/90 font-bold flex items-center gap-1 mt-1 bg-amber-950/40 px-2 py-0.5 rounded border border-amber-500/30">
-                              <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
-                              <span>{eq.passive.description}</span>
-                            </div>
-                          )}
-                       </div>
-                    </div>
-
-                    <button 
-                      disabled={item.sold}
-                      onClick={() => {
-                        if (item.sold) return;
-                        if (gameState.gold >= item.price) {
-                          setGameState(prev => {
-                            const newShopItems = [...prev.shopItems];
-                            newShopItems[idx].sold = true;
-
-                            const newInventory = [...(prev.inventory || []), eq];
-                            let updatedEquipment = { ...prev.equipment };
-                            
-                            // Auto-equip if slot is currently empty
-                            if (!updatedEquipment[eq.slot]) {
-                              updatedEquipment[eq.slot] = eq;
-                            }
-
-                            const updatedStats = calculateTotalStats(prev.stats, updatedEquipment);
-                            const newPlayerMaxHp = updatedStats.maxHp;
-
-                            return {
-                              ...prev,
-                              gold: prev.gold - item.price,
-                              equipment: updatedEquipment,
-                              inventory: newInventory,
-                              playerMaxHp: newPlayerMaxHp,
-                              playerHp: Math.min(newPlayerMaxHp, prev.playerHp),
-                              shopItems: newShopItems
-                            };
-                          });
-                          audio.playTone(600, 'sine', 0.1, 0.3);
-                        } else alert("Not enough gold!");
-                      }}
-                      className={cn(
-                        "px-3.5 py-2 rounded-xl text-xs font-bold shrink-0 transition-transform active:scale-95 flex items-center gap-1",
-                        item.sold 
-                          ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed" 
-                          : "bg-gradient-to-r from-amber-500 to-amber-700 text-black border border-yellow-300 font-extrabold shadow-md hover:brightness-110"
-                      )}
-                    >
-                      {item.sold ? 'SOLD' : <><Coins className="w-3.5 h-3.5" /> {item.price}G</>}
-                    </button>
-                 </div>
-               );
-            })}
-          </div>
+        <div className="flex-1 flex flex-col p-4 z-10 relative max-w-4xl mx-auto w-full overflow-hidden">
+          <MerchantShopView 
+            gameState={gameState}
+            setGameState={setGameState}
+          />
           
           <button 
             onClick={() => setGameState(prev => ({ ...prev, status: 'map', currentLayer: prev.currentLayer + 1 }))}
-            className="w-full py-4 bg-gradient-to-r from-slate-800 to-slate-900 border border-slate-700 rounded-2xl font-bold mt-4 text-white hover:border-slate-500 transition-colors shadow-lg"
+            className="w-full py-3 bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 border-2 border-amber-500/50 hover:border-amber-400 rounded-2xl font-black text-xs uppercase tracking-wider text-amber-300 transition-all shadow-lg active:scale-95 shrink-0 mt-1"
           >
-             LEAVE SHOP
+             🚪 Leave Barnaby's Shop & Continue Journey
           </button>
         </div>
       )}
+
+
 
       {gameState.status === 'store' && (
         <div className="flex-1 flex flex-col p-6 z-10">
@@ -1573,6 +1777,7 @@ export default function App() {
       {/* GAME OVER & VICTORY SCREEN */}
       {(gameState.status === 'gameover' || gameState.status === 'victory') && (
         <div className="absolute inset-0 z-40 bg-slate-950/80 backdrop-blur-xl flex flex-col items-center justify-center p-8 text-center">
+          {gameState.status === 'victory' && <Confetti />}
           <div className="flex justify-center mb-6">
             {gameState.status === 'victory' ? (
               <div className="relative">
@@ -1634,66 +1839,6 @@ export default function App() {
           )}
 
           {/* TOP-RIGHT VISUAL CHAIN COMBO COUNTER */}
-          <AnimatePresence>
-            {chainCombo > 0 && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.5, y: -20, x: 20 }}
-                animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
-                exit={{ opacity: 0, scale: 0.6, y: -20 }}
-                key={`chain-hud-${chainCombo}`}
-                className="absolute top-[72px] right-3 z-30 flex flex-col items-end pointer-events-none"
-              >
-                <div className="relative bg-gradient-to-r from-amber-950/95 via-slate-900/95 to-orange-950/95 border-2 border-amber-400/90 rounded-2xl px-3 py-2 shadow-[0_0_25px_rgba(245,158,11,0.7)] backdrop-blur-md flex flex-col items-end overflow-hidden min-w-[130px]">
-                  {/* Glowing Aura Overlay */}
-                  <motion.div 
-                    animate={{ opacity: [0.3, 0.7, 0.3] }}
-                    transition={{ repeat: Infinity, duration: 0.8 }}
-                    className="absolute inset-0 bg-gradient-to-l from-amber-500/20 via-orange-500/10 to-transparent rounded-2xl pointer-events-none"
-                  />
-
-                  {/* Header: Flame/Lightning Icon + CHAIN xCOUNT */}
-                  <div className="flex items-center gap-1.5 z-10">
-                    <motion.span 
-                      animate={{ scale: [1, 1.35, 1], rotate: [-10, 10, 0] }}
-                      transition={{ duration: 0.2 }}
-                      className="text-amber-400 text-base"
-                    >
-                      ⚡
-                    </motion.span>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-[9px] font-pixel text-amber-200/80 uppercase tracking-widest">CHAIN</span>
-                      <motion.span 
-                        key={`chain-count-num-${chainCombo}`}
-                        initial={{ scale: 1.5, color: '#fef08a' }}
-                        animate={{ scale: 1, color: '#fbbf24' }}
-                        transition={{ type: 'spring', stiffness: 500, damping: 15 }}
-                        className="text-xl font-pixel font-black text-amber-400 drop-shadow-[0_2px_8px_rgba(251,191,36,0.9)]"
-                      >
-                        x{chainCombo}
-                      </motion.span>
-                    </div>
-                  </div>
-
-                  {/* Damage Bonus Multiplier Badge */}
-                  <div className="text-[9px] font-pixel text-orange-200 font-bold bg-amber-950/80 px-2 py-0.5 rounded-md border border-amber-500/50 my-1 z-10 shadow-sm flex items-center gap-1">
-                    <span className="text-amber-400/90">BONUS:</span>
-                    <span className="text-yellow-300 font-black">
-                      +{(chainCombo * 25)}% DMG
-                    </span>
-                  </div>
-
-                  {/* Decay Timer Window Gauge */}
-                  <div className="w-full h-1.5 bg-black/70 rounded-full border border-amber-500/30 overflow-hidden mt-0.5 z-10">
-                    <motion.div 
-                      className="h-full bg-gradient-to-r from-amber-400 via-orange-400 to-red-500 shadow-[0_0_8px_rgba(251,191,36,1)] rounded-full"
-                      style={{ width: `${Math.max(0, (chainTimer / MAX_CHAIN_TIMER) * 100)}%` }}
-                      transition={{ duration: 0.1, ease: 'linear' }}
-                    />
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
           <div className="w-full flex items-center justify-between p-3 backdrop-blur-xl bg-slate-950/60 border-b border-white/10 shadow-sm z-10">
             <div className="flex flex-col gap-2 w-2/3">
               <div className="flex items-center gap-3">
@@ -1738,6 +1883,15 @@ export default function App() {
                    {isMusicPlaying ? <Volume2 className="w-3 h-3 text-amber-400 animate-pulse" /> : <VolumeX className="w-3 h-3 text-slate-500" />}
                    <span>{isMusicPlaying ? 'BGM ON' : 'BGM OFF'}</span>
                  </button>
+
+                 <button
+                   onClick={() => setIsTipsOpen(true)}
+                   className="flex items-center gap-1 text-[10px] font-pixel border px-2 py-0.5 rounded-lg transition-all active:scale-95 bg-slate-900/80 border-amber-500/40 hover:border-amber-400 text-amber-300 shadow-[0_0_6px_rgba(245,158,11,0.2)]"
+                   title="View Quest Tips"
+                 >
+                   <Lightbulb className="w-3 h-3 text-amber-400" />
+                   <span>Tips</span>
+                 </button>
               </div>
             </div>
             <div className="flex flex-col items-end">
@@ -1750,7 +1904,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="w-full flex justify-center py-1.5 gap-3 z-10">
+          <div className="w-full flex justify-center py-1 gap-3 z-10 shrink-0">
              {[0, 1, 2].map(i => (
                 <div key={i} className={cn(
                    "w-8 h-2 rounded-full transition-colors shadow-sm",
@@ -1759,19 +1913,20 @@ export default function App() {
              ))}
           </div>
 
+          {/* Boss/Enemy Card Container */}
           <div className="w-full shrink-0 flex flex-col items-center justify-center relative px-4 z-10">
-            <div className="backdrop-blur-xl bg-slate-950/80 border border-slate-800 rounded-3xl p-2.5 flex flex-col items-center justify-center relative w-full max-w-[340px] shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+            <div className="backdrop-blur-xl bg-slate-950/85 border border-slate-800 rounded-3xl p-2.5 flex flex-col items-center justify-center relative w-full max-w-[340px] shadow-[0_10px_30px_rgba(0,0,0,0.8)]">
               {/* Card Header Badges */}
-              <div className="w-full flex items-center justify-between mb-1">
+              <div className="w-full flex items-center justify-between mb-0.5">
                 <span className={cn(
-                  "text-[10px] font-bold px-2.5 py-1 rounded-md border uppercase tracking-widest shadow-sm",
+                  "text-[10px] font-bold px-2 py-0.5 rounded-md border uppercase tracking-widest shadow-sm",
                   getEnemyInfo(gameState.enemyType).isBoss 
                     ? "bg-red-950/90 text-red-400 border-red-500/40" 
                     : "bg-emerald-950/90 text-emerald-400 border-emerald-500/40"
                 )}>
                   {getEnemyInfo(gameState.enemyType).isBoss ? 'APEX BOSS' : 'MINION BATTLE'}
                 </span>
-                <span className="bg-purple-950/90 text-purple-300 text-[10px] font-bold px-2.5 py-1 rounded-md border border-purple-500/40 uppercase tracking-widest shadow-sm">
+                <span className="bg-purple-950/90 text-purple-300 text-[10px] font-bold px-2 py-0.5 rounded-md border border-purple-500/40 uppercase tracking-widest shadow-sm">
                   {gameState.bossStunTimer > 0 ? (
                     <span className="text-yellow-400 animate-pulse">STUNNED ({gameState.bossStunTimer}s)</span>
                   ) : (
@@ -1780,16 +1935,16 @@ export default function App() {
                 </span>
               </div>
 
-              {/* Boss/Enemy Name Banner */}
-              <div className="w-full text-center py-0.5 my-0.5 bg-gradient-to-r from-red-950/50 via-slate-900/80 to-red-950/50 border-y border-red-500/30 rounded-lg">
-                <span className="text-base font-pixel tracking-widest text-amber-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] uppercase">
+              {/* Boss/Enemy Name Banner - Properly truncated and formatted */}
+              <div className="w-full text-center py-1 px-2 my-0.5 bg-gradient-to-r from-red-950/80 via-slate-900/95 to-red-950/80 border-y border-amber-500/40 rounded-xl overflow-hidden shadow-inner">
+                <span className="text-sm font-pixel tracking-widest text-amber-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] uppercase truncate block">
                   {getEnemyInfo(gameState.enemyType).name}
                 </span>
               </div>
               
-              {/* Boss/Enemy Sprite Frame */}
-              <div className="w-full h-[72px] flex items-center justify-center relative my-1 rounded-2xl bg-slate-900/40 border border-white/10 shadow-inner overflow-visible">
-                 <div className="flex items-center justify-center pointer-events-none w-full h-full">
+              {/* Boss/Enemy Sprite Frame - Cleanly contained without clipping lines */}
+              <div className="w-full h-[135px] flex items-center justify-center relative my-0.5 rounded-2xl bg-slate-950/60 border border-white/10 shadow-inner overflow-hidden">
+                 <div className="flex items-center justify-center pointer-events-none w-full h-full scale-100">
                    <BossModel 
                      type={gameState.enemyType} 
                      isHit={enemyHit} 
@@ -1813,9 +1968,9 @@ export default function App() {
                   'shadow-[0_0_20px_rgba(16,185,129,0.2)] border-emerald-500/40 bg-slate-950/95';
 
                 return (
-                  <div className={cn("w-full rounded-xl p-1.5 my-1 grid grid-cols-2 gap-1.5 text-[10px] font-black uppercase tracking-wider shadow-xl border relative overflow-hidden transition-all duration-500", auraGlow)}>
+                  <div className={cn("w-full rounded-xl p-1.5 my-0.5 grid grid-cols-2 gap-1.5 text-[10px] font-black uppercase tracking-wider shadow-xl border relative overflow-hidden transition-all duration-500", auraGlow)}>
                     {/* Weakness Indicator Pill */}
-                    <div className="flex items-center justify-between bg-black/60 px-2 py-1.5 rounded-lg border border-white/10 relative z-10 overflow-hidden min-w-0">
+                    <div className="flex items-center justify-between bg-black/60 px-2 py-1 rounded-lg border border-white/10 relative z-10 overflow-hidden min-w-0">
                       <span className="text-white/50 text-[9px] font-extrabold shrink-0 mr-1">WEAK:</span>
                       {weakElem === 'water' && (
                         <motion.span 
@@ -1853,7 +2008,7 @@ export default function App() {
                     </div>
 
                     {/* Resistance Indicator Pill */}
-                    <div className="flex items-center justify-between bg-black/60 px-2 py-1.5 rounded-lg border border-white/10 relative z-10 overflow-hidden min-w-0">
+                    <div className="flex items-center justify-between bg-black/60 px-2 py-1 rounded-lg border border-white/10 relative z-10 overflow-hidden min-w-0">
                       <span className="text-white/50 text-[9px] font-extrabold shrink-0 mr-1">RESIST:</span>
                       {resistElem === 'fire' && (
                         <span className="flex items-center text-amber-300 gap-1 font-black text-[10px] truncate shrink-0">
@@ -1882,12 +2037,12 @@ export default function App() {
               })()}
 
               {/* Boss Health Bar */}
-              <div className="w-full space-y-1 mt-0.5">
+              <div className="w-full space-y-0.5 mt-0.5">
                  <div className="flex justify-between text-[10px] uppercase font-bold tracking-wider text-red-400">
                    <span>Boss HP</span>
                    <span>{Math.max(0, gameState.enemyHp)} / {gameState.enemyMaxHp}</span>
                  </div>
-                 <div className="h-3.5 bg-black/60 rounded-full border border-white/10 p-0.5 overflow-hidden">
+                 <div className="h-3 bg-black/60 rounded-full border border-white/10 p-0.5 overflow-hidden">
                     <motion.div 
                        className="h-full bg-gradient-to-r from-red-600 to-orange-400 rounded-full shadow-[0_0_15px_rgba(239,68,68,0.5)]" 
                        initial={{ width: '100%' }}
@@ -1898,9 +2053,122 @@ export default function App() {
             </div>
           </div>
 
-          <div className="w-full flex-1 min-h-0 p-3 pb-5 flex justify-center z-20">
-            <div ref={boardWrapperRef} className="w-full h-full max-w-[460px] backdrop-blur-xl bg-slate-950/60 border border-white/10 rounded-[40px] p-4 flex items-center justify-center shadow-2xl">
-              <div id="gem-grid-container" className="relative" style={{ width: COLS * GEM_SIZE + 8, height: ROWS * GEM_SIZE + 8 }}>
+          {/* DEDICATED REACTIVE CHAIN COMBO BANNER ROW - Non-overlapping! */}
+          <div className="w-full flex justify-center items-center h-10 my-1 z-30 pointer-events-none relative px-4">
+            <AnimatePresence>
+              {chainCombo > 0 && (() => {
+                const tier = getComboTierInfo(chainCombo);
+                return (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.5, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.6, y: -10 }}
+                    key="chain-hud"
+                    className="flex items-center justify-center pointer-events-none"
+                  >
+                    <motion.div 
+                      animate={chainPulseControls}
+                      className={cn(
+                        "relative bg-gradient-to-r border-2 rounded-2xl px-4 py-1 backdrop-blur-md flex items-center gap-3 shadow-2xl overflow-hidden min-w-[220px]",
+                        tier.bgGradient,
+                        tier.borderColor
+                      )}
+                    >
+                      {/* Glowing Aura Overlay */}
+                      <motion.div 
+                        animate={{ opacity: [0.3, 0.8, 0.3], scale: [1, 1.05, 1] }}
+                        transition={{ repeat: Infinity, duration: 0.6 }}
+                        className="absolute inset-0 bg-gradient-to-r from-amber-500/20 via-orange-500/10 to-transparent rounded-2xl pointer-events-none"
+                      />
+
+                      <motion.span 
+                        key={`chain-icon-${chainCombo}`}
+                        animate={{ scale: [1, 1.4, 1], rotate: [-12, 12, 0] }}
+                        transition={{ duration: 0.25 }}
+                        className="text-xl shrink-0"
+                      >
+                        {tier.icon}
+                      </motion.span>
+
+                      <div className="flex flex-col items-start justify-center z-10 min-w-0">
+                        <motion.span 
+                          key={`tier-title-${chainCombo}`}
+                          initial={{ scale: 0.8, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className="text-[9px] font-pixel font-black tracking-wider uppercase text-amber-300 drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] truncate"
+                        >
+                          {tier.title}
+                        </motion.span>
+
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-[9px] font-pixel text-amber-200/80 uppercase tracking-widest">CHAIN</span>
+                          <motion.span 
+                            key={`chain-count-num-${chainCombo}`}
+                            initial={{ scale: 1.6, rotate: -5 }}
+                            animate={{ scale: 1, rotate: 0 }}
+                            transition={{ type: 'spring', stiffness: 500, damping: 15 }}
+                            className={cn("text-xl font-pixel font-black leading-none", tier.textColor)}
+                          >
+                            x{chainCombo}
+                          </motion.span>
+                          <span className="text-[9px] font-pixel font-bold text-yellow-300 ml-1">
+                            (+{chainCombo * 25}% DMG)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Decay Timer Gauge Bar */}
+                      <div className="w-10 h-1.5 bg-black/80 rounded-full border border-amber-500/30 overflow-hidden ml-auto shrink-0 z-10">
+                        <motion.div 
+                          className={cn("h-full shadow-[0_0_8px_rgba(251,191,36,1)] rounded-full bg-gradient-to-r", tier.gaugeGradient)}
+                          style={{ width: `${Math.max(0, (chainTimer / MAX_CHAIN_TIMER) * 100)}%` }}
+                          transition={{ duration: 0.1, ease: 'linear' }}
+                        />
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                );
+              })()}
+            </AnimatePresence>
+          </div>
+
+          {/* 3D TACTILE PUZZLE BOARD CONTAINER WITH DYNAMIC CHAPTER THEME */}
+          {(() => {
+            const chapterNum = gameState.chapter || 1;
+            const themeKey = CHAPTERS_DATA[chapterNum - 1]?.boardTheme || 'emerald';
+            const themeStyle = BOARD_THEME_STYLES[themeKey] || BOARD_THEME_STYLES.emerald;
+            return (
+              <div ref={boardContainerRef} className="w-full flex-1 min-h-0 p-1 flex items-center justify-center z-20">
+                <div 
+                  className={cn(
+                    "backdrop-blur-2xl border-4 rounded-[28px] p-2 flex items-center justify-center relative overflow-hidden transition-all duration-300 shadow-[0_20px_50px_rgba(0,0,0,0.95)] shrink-0",
+                    themeStyle.wrapper
+                  )}
+                  style={{
+                    width: COLS * GEM_SIZE + 20,
+                    height: ROWS * GEM_SIZE + 20,
+                  }}
+                >
+                  {/* Decorative Runic Corner Symbols */}
+                  <div className="absolute top-1.5 left-2 text-[10px] opacity-70 pointer-events-none select-none">{themeStyle.corner}</div>
+                  <div className="absolute top-1.5 right-2 text-[10px] opacity-70 pointer-events-none select-none">{themeStyle.corner}</div>
+                  <div className="absolute bottom-1.5 left-2 text-[10px] opacity-70 pointer-events-none select-none">{themeStyle.corner}</div>
+                  <div className="absolute bottom-1.5 right-2 text-[10px] opacity-70 pointer-events-none select-none">{themeStyle.corner}</div>
+
+                  <div id="gem-grid-container" className="relative rounded-2xl overflow-hidden" style={{ width: COLS * GEM_SIZE, height: ROWS * GEM_SIZE }}>
+                    {/* 3D Recessed Grid Sockets Underneath */}
+                    <div className="absolute inset-1 grid grid-cols-8 grid-rows-8 gap-0 pointer-events-none p-1">
+                      {Array.from({ length: 64 }).map((_, idx) => (
+                        <div 
+                          key={idx} 
+                          className={cn(
+                            "m-[1.5px] rounded-[10px] border",
+                            themeStyle.socket
+                          )}
+                        />
+                      ))}
+                    </div>
+
                 <AnimatePresence>
                   {gems.map(gem => (
                     <motion.div
@@ -1917,25 +2185,40 @@ export default function App() {
                       onPanEnd={handleGemPanEnd}
                     >
                       <div className={cn(
-                        "w-full h-full rounded-[10px] flex items-center justify-center transition-all duration-200 border bg-gradient-to-br from-white/10 to-black/40 backdrop-blur-sm shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_4px_8px_rgba(0,0,0,0.6)]",
+                        "w-full h-full rounded-[12px] flex items-center justify-center transition-all duration-200 border-2 relative overflow-hidden group transform-gpu",
                         selectedGemId === gem.id 
-                          ? 'border-white ring-2 ring-white scale-110 z-20 shadow-[0_0_20px_rgba(255,255,255,0.5)]' 
+                          ? 'border-amber-300 ring-2 ring-amber-300/80 scale-105 z-20 shadow-[0_4px_12px_rgba(0,0,0,0.8),0_0_12px_rgba(251,191,36,0.5)]' 
                           : gem.special === 'rainbow'
-                          ? 'border-amber-300 ring-2 ring-amber-400/80 bg-gradient-to-tr from-purple-800 via-pink-700 to-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.9)] animate-pulse'
+                          ? 'border-amber-300 ring-1 ring-amber-400/60 bg-gradient-to-tr from-purple-900/60 via-pink-900/60 to-amber-900/60 shadow-[0_0_10px_rgba(245,158,11,0.4)]'
                           : gem.special === 'bomb_3x3'
-                          ? 'border-red-400 ring-2 ring-red-500/80 bg-gradient-to-tr from-red-950 via-orange-900 to-red-600 shadow-[0_0_15px_rgba(239,68,68,0.9)] animate-pulse'
+                          ? 'border-red-400 ring-1 ring-red-500/60 bg-gradient-to-tr from-red-950/80 via-orange-950/80 to-red-900/80 shadow-[0_0_10px_rgba(239,68,68,0.4)]'
                           : gem.special === 'light_holy'
-                          ? 'border-yellow-300 ring-1 ring-yellow-400/80 bg-gradient-to-tr from-yellow-950 via-amber-900 to-yellow-600 shadow-[0_0_12px_rgba(250,204,21,0.8)]'
+                          ? 'border-yellow-300 ring-1 ring-yellow-400/60 bg-gradient-to-tr from-yellow-950/80 via-amber-950/80 to-yellow-900/80 shadow-[0_0_10px_rgba(250,204,21,0.4)]'
                           : gem.special === 'dark_void'
-                          ? 'border-purple-300 ring-1 ring-purple-400/80 bg-gradient-to-tr from-purple-950 via-indigo-900 to-purple-600 shadow-[0_0_12px_rgba(168,85,247,0.8)]'
+                          ? 'border-purple-300 ring-1 ring-purple-400/60 bg-gradient-to-tr from-purple-950/80 via-indigo-950/80 to-purple-900/80 shadow-[0_0_10px_rgba(168,85,247,0.4)]'
                           : hintGemIds.includes(gem.id)
-                          ? 'border-emerald-300 ring-2 ring-emerald-300/80 animate-pulse shadow-[0_0_16px_rgba(110,231,183,0.8)]'
-                          : 'border-white/20 hover:bg-white/15 hover:border-white/40'
+                          ? (GEM_HINT_CLASSES[gem.type] || 'border-emerald-300 ring-2 ring-emerald-300/80 animate-pulse shadow-[0_0_12px_rgba(110,231,183,0.5)]')
+                          : (GEM_3D_BACKGROUNDS[gem.type] || 'border-white/20 bg-slate-800/80')
                       )}>
+                        {/* Selected Gem Golden Corner Target Reticles */}
+                        {selectedGemId === gem.id && (
+                          <>
+                            <div className="absolute top-0.5 left-0.5 w-2 h-2 border-t-2 border-l-2 border-amber-300 z-30 pointer-events-none" />
+                            <div className="absolute top-0.5 right-0.5 w-2 h-2 border-t-2 border-r-2 border-amber-300 z-30 pointer-events-none" />
+                            <div className="absolute bottom-0.5 left-0.5 w-2 h-2 border-b-2 border-l-2 border-amber-300 z-30 pointer-events-none" />
+                            <div className="absolute bottom-0.5 right-0.5 w-2 h-2 border-b-2 border-r-2 border-amber-300 z-30 pointer-events-none" />
+                          </>
+                        )}
+
+                        {/* 3D Specular Top Gloss Highlight */}
+                        <div className="absolute top-0.5 inset-x-1 h-2.5 bg-gradient-to-b from-white/45 via-white/10 to-transparent rounded-t-lg pointer-events-none z-10" />
+                        {/* 3D Bottom Edge Shadow */}
+                        <div className="absolute bottom-0 inset-x-0 h-1.5 bg-black/40 pointer-events-none z-10" />
+
                         <GemIcon
                           type={gem.type}
                           special={gem.special}
-                          className={cn("drop-shadow-lg", GEM_ICON_COLORS[gem.type] || 'text-white')}
+                          className={cn("drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)] z-10 transform-gpu transition-transform group-hover:scale-105", GEM_ICON_COLORS[gem.type] || 'text-white')}
                           style={{ width: GEM_SIZE * 0.72, height: GEM_SIZE * 0.72 }}
                         />
                       </div>
@@ -1945,7 +2228,9 @@ export default function App() {
               </div>
             </div>
           </div>
-        </motion.div>
+        );
+      })()}
+    </motion.div>
       )}
 
       {/* EQUIPMENT DETAIL MODAL */}
@@ -2023,6 +2308,11 @@ export default function App() {
         onClose={() => setIsInventoryOpen(false)}
         gameState={gameState}
         setGameState={setGameState}
+      />
+
+      <QuestTipsModal
+        isOpen={isTipsOpen}
+        onClose={() => setIsTipsOpen(false)}
       />
     </motion.div>
   );

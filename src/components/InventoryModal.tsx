@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { XCircle, Shield, Sword, Heart, Sparkles, Coins, ArrowRightLeft, Trash2, Package } from 'lucide-react';
+import { XCircle, Shield, Sword, Heart, Sparkles, Coins, ArrowRightLeft, Trash2, Package, AlertTriangle, Check, X } from 'lucide-react';
 import { Equipment, EquipmentSlot, GameState } from '../types';
 import { getRarityColor, getRarityBadge, calculateTotalStats, getItemSellValue } from '../roguelike';
 import { cn } from '../utils';
 import { audio } from '../audio';
+import { MerchantSprite, MERCHANT_TAUNTS } from './MerchantSprite';
 
 interface InventoryModalProps {
   isOpen: boolean;
@@ -19,6 +20,11 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
   setGameState,
 }) => {
   const [slotFilter, setSlotFilter] = useState<'all' | EquipmentSlot>('all');
+  const [merchantMsg, setMerchantMsg] = useState<string>(
+    "Ah, welcome to your bag! Got any shiny loot you want to sell to old Barnaby?"
+  );
+  const [merchantMood, setMerchantMood] = useState<'idle' | 'happy' | 'taunt' | 'surprised'>('idle');
+  const [pendingSellItem, setPendingSellItem] = useState<Equipment | null>(null);
 
   if (!isOpen) return null;
 
@@ -56,6 +62,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
       };
     });
 
+    setMerchantMsg(`Equipped ${itemToEquip.name}! Fits like a glove on a hero!`);
+    setMerchantMood('happy');
     audio.playSwapSound();
   };
 
@@ -84,19 +92,48 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
       };
     });
 
+    setMerchantMsg(`Unequipped ${itemToUnequip.name}. Fighting light, are we?`);
+    setMerchantMood('surprised');
     audio.playSwapSound();
   };
 
-  const handleSell = (itemToSell: Equipment) => {
+  const initiateSell = (itemToSell: Equipment) => {
     const goldEarned = getItemSellValue(itemToSell);
+    setPendingSellItem(itemToSell);
+    const taunts = MERCHANT_TAUNTS.sellHover(itemToSell.name, goldEarned);
+    setMerchantMsg(taunts[Math.floor(Math.random() * taunts.length)]);
+    setMerchantMood('taunt');
+  };
+
+  const confirmSell = () => {
+    if (!pendingSellItem) return;
+    const goldEarned = getItemSellValue(pendingSellItem);
 
     setGameState(prev => ({
       ...prev,
       gold: prev.gold + goldEarned,
-      inventory: prev.inventory.filter(i => i.id !== itemToSell.id),
+      inventory: prev.inventory.filter(i => i.id !== pendingSellItem.id),
     }));
 
+    const confirmLines = MERCHANT_TAUNTS.sellConfirm;
+    setMerchantMsg(confirmLines[Math.floor(Math.random() * confirmLines.length)]);
+    setMerchantMood('happy');
+    setPendingSellItem(null);
+
     audio.playTone(550, 'sine', 0.1, 0.3);
+  };
+
+  const cancelSell = () => {
+    setPendingSellItem(null);
+    setMerchantMsg("Hah! Smart choice. Keep your finest weapons for the dark beasts ahead!");
+    setMerchantMood('idle');
+  };
+
+  const handleMerchantPoke = () => {
+    const pokes = MERCHANT_TAUNTS.poke;
+    setMerchantMsg(pokes[Math.floor(Math.random() * pokes.length)]);
+    setMerchantMood('taunt');
+    audio.playTone(400, 'triangle', 0.08, 0.2);
   };
 
   const filteredInventory = gameState.inventory.filter(item => {
@@ -134,6 +171,13 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          {/* Interactive 3D Merchant Banner */}
+          <MerchantSprite
+            message={merchantMsg}
+            mood={merchantMood}
+            onTap={handleMerchantPoke}
+          />
+
           {/* Hero Total Stats Overview */}
           <div className="p-3.5 rounded-2xl bg-gradient-to-r from-slate-900/90 to-slate-950/90 border border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-inner">
             <div className="flex items-center gap-4 text-xs font-extrabold text-white">
@@ -307,8 +351,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
 
                         {/* Sell Button */}
                         <button
-                          onClick={() => handleSell(item)}
-                          title="Sell for Gold"
+                          onClick={() => initiateSell(item)}
+                          title="Sell to Barnaby for Gold"
                           className="flex-1 py-1.5 rounded-xl bg-slate-900 hover:bg-yellow-950 text-yellow-400 border border-slate-700 hover:border-yellow-500 text-xs font-bold active:scale-95 transition-all flex items-center justify-center gap-1"
                         >
                           <Coins className="w-3 h-3" />+{getItemSellValue(item)}G
@@ -321,6 +365,42 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
             )}
           </div>
         </div>
+
+        {/* Barnaby Sell Confirmation Modal Overlay */}
+        {pendingSellItem && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-950 border-2 border-amber-500 rounded-2xl p-4 max-w-sm w-full text-center space-y-3 shadow-[0_0_30px_rgba(245,158,11,0.5)]">
+              <div className="w-12 h-12 rounded-full bg-amber-500/20 border border-amber-400 text-amber-300 flex items-center justify-center mx-auto text-2xl">
+                💰
+              </div>
+              <div>
+                <h4 className="text-amber-300 font-extrabold text-sm uppercase">Sell Confirmation</h4>
+                <p className="text-xs text-slate-300 mt-1">
+                  Are you sure you want to sell <span className="text-white font-bold">{pendingSellItem.name}</span> for <span className="text-yellow-400 font-black">{getItemSellValue(pendingSellItem)}G</span>?
+                </p>
+              </div>
+
+              <div className="p-2 bg-amber-950/40 border border-amber-500/30 rounded-xl text-[11px] text-amber-200 italic">
+                "{merchantMsg}"
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  onClick={cancelSell}
+                  className="flex-1 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs flex items-center justify-center gap-1 transition-all"
+                >
+                  <X className="w-4 h-4" /> Keep Item
+                </button>
+                <button
+                  onClick={confirmSell}
+                  className="flex-1 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs flex items-center justify-center gap-1 shadow-md transition-all active:scale-95"
+                >
+                  <Check className="w-4 h-4" /> Confirm Sell
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

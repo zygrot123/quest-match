@@ -174,6 +174,170 @@ export class AudioEngine {
     }
   }
 
+  // --- REALISTIC PROCEDURAL MONSTER SOUND GENERATORS ---
+  playDragonRoar() {
+    this.init();
+    // Deep sub growl rumble
+    this.playToneSweep(140, 40, 'sawtooth', 0.8, 0.85);
+    this.playToneSweep(260, 70, 'square', 0.7, 0.6, 0.04);
+    this.playTone(45, 'sine', 0.8, 0.9);
+    // Fiery breath lowpass noise burst
+    this.playNoise(0.85, 0.7, 550, 0.08);
+    // Secondary terrifying growl echo
+    setTimeout(() => {
+      this.playToneSweep(180, 50, 'sawtooth', 0.6, 0.7);
+      this.playNoise(0.6, 0.55, 750);
+    }, 220);
+  }
+
+  playMapTravelSound() {
+    this.init();
+    // Paper page turn rustle noise sweep
+    this.playNoise(0.2, 0.4, 1800);
+    this.playNoise(0.15, 0.3, 3200, 0.08);
+    // Adventurous brassy compass / map chime notes
+    this.playToneSweep(260, 520, 'triangle', 0.25, 0.4, 0.05);
+    this.playTone(659.25, 'sine', 0.35, 0.4, 0.15); // E5
+    this.playTone(783.99, 'sine', 0.45, 0.35, 0.25); // G5
+  }
+
+  playSlimeSound() {
+    this.init();
+    // Pitch bend sweep for a gooey, squishy, wet bloop sound
+    this.playToneSweep(220, 620, 'sine', 0.12, 0.85);
+    this.playToneSweep(620, 130, 'sine', 0.18, 0.75, 0.08);
+    // Wet splash noise
+    this.playNoise(0.16, 0.45, 2800, 0.04);
+    // Secondary bubble pop
+    setTimeout(() => {
+      this.playToneSweep(380, 780, 'sine', 0.08, 0.55);
+      this.playToneSweep(780, 210, 'sine', 0.1, 0.45, 0.04);
+    }, 130);
+  }
+
+  playGolemSound() {
+    this.init();
+    // Heavy stone grinding impact & earth rumble
+    this.playToneSweep(110, 25, 'square', 0.6, 0.85);
+    this.playTone(55, 'triangle', 0.7, 0.9);
+    this.playNoise(0.55, 0.75, 300);
+    setTimeout(() => {
+      this.playNoise(0.35, 0.5, 450);
+      this.playToneSweep(90, 30, 'sawtooth', 0.3, 0.6);
+    }, 150);
+  }
+
+  playGoblinSound() {
+    this.init();
+    // Low-pitched raspy growl & sneaky muttered snarl
+    this.playToneSweep(240, 110, 'sawtooth', 0.22, 0.65);
+    this.playToneSweep(110, 160, 'square', 0.18, 0.55, 0.06);
+    // Low throat rasp noise
+    this.playNoise(0.25, 0.45, 800, 0.02);
+    // Sneaky dagger clink / coin rattling accent
+    setTimeout(() => {
+      this.playToneSweep(190, 85, 'sawtooth', 0.2, 0.6);
+      this.playTone(2800, 'triangle', 0.04, 0.4);
+      this.playTone(3400, 'triangle', 0.04, 0.35, 0.03);
+    }, 140);
+  }
+
+  playImpSound() {
+    this.init();
+    // Mischievous high-pitched inferno imp cackle/screech sequence
+    this.playToneSweep(1200, 2400, 'sawtooth', 0.1, 0.7);
+    this.playToneSweep(2400, 1500, 'square', 0.12, 0.6, 0.08);
+    this.playToneSweep(1500, 2800, 'sawtooth', 0.14, 0.75, 0.18);
+    // Fiery crackle/spark noise burst
+    this.playNoise(0.3, 0.6, 3500, 0.02);
+    // Secondary fiery giggle/chirp
+    setTimeout(() => {
+      this.playToneSweep(2000, 3100, 'triangle', 0.08, 0.5);
+      this.playToneSweep(3100, 1800, 'square', 0.1, 0.45, 0.06);
+      this.playNoise(0.2, 0.45, 2800);
+    }, 220);
+  }
+
+  playSkeletonSound() {
+    this.init();
+    // Bone clatter & clacking rattle
+    const clacks = [1100, 850, 1050, 750];
+    clacks.forEach((freq, idx) => {
+      this.playTone(freq, 'triangle', 0.05, 0.6, idx * 0.05);
+      this.playNoise(0.04, 0.4, 3200, idx * 0.05);
+    });
+  }
+
+  playElfSound() {
+    this.init();
+    // Swift gale wind & mystic chime
+    this.playNoise(0.25, 0.35, 1600);
+    this.playToneSweep(880, 1320, 'sine', 0.2, 0.5);
+    this.playTone(1760, 'sine', 0.2, 0.3, 0.08);
+  }
+
+  playMonsterSound(type: string, action?: 'attack' | 'hit' | 'taunt') {
+    this.init();
+    switch (type) {
+      case 'dragon':
+        this.playDragonRoar();
+        break;
+      case 'slime':
+        this.playSlimeSound();
+        break;
+      case 'golem':
+        this.playGolemSound();
+        break;
+      case 'goblin':
+        this.playGoblinSound();
+        break;
+      case 'imp':
+        this.playImpSound();
+        break;
+      case 'skeleton':
+        this.playSkeletonSound();
+        break;
+      case 'elf':
+        this.playElfSound();
+        break;
+      case 'minotaur':
+        this.playToneSweep(110, 45, 'sawtooth', 0.5, 0.8);
+        this.playNoise(0.4, 0.6, 600);
+        break;
+      case 'mummy':
+        this.playToneSweep(280, 120, 'sine', 0.4, 0.6);
+        this.playNoise(0.3, 0.5, 900);
+        break;
+      case 'specter':
+        this.playToneSweep(800, 300, 'sine', 0.6, 0.5);
+        this.playTone(150, 'sawtooth', 0.4, 0.4, 0.1);
+        break;
+      case 'kraken':
+        this.playToneSweep(180, 50, 'sawtooth', 0.6, 0.85);
+        this.playNoise(0.5, 0.7, 400);
+        break;
+      case 'phoenix':
+        this.playToneSweep(1200, 2400, 'sine', 0.4, 0.7);
+        this.playNoise(0.3, 0.5, 2500);
+        break;
+      case 'gargoyle':
+        this.playToneSweep(160, 40, 'square', 0.5, 0.8);
+        this.playNoise(0.35, 0.6, 800);
+        break;
+      case 'vampire':
+        this.playToneSweep(650, 1200, 'sawtooth', 0.3, 0.7);
+        this.playTone(220, 'sine', 0.4, 0.5);
+        break;
+      case 'hydra':
+        this.playToneSweep(350, 90, 'sawtooth', 0.5, 0.8);
+        this.playToneSweep(450, 110, 'square', 0.4, 0.7, 0.05);
+        break;
+      default:
+        this.playEnemyAttackSound();
+        break;
+    }
+  }
+
   playHitSound() {
     this.init();
     this.playNoise(0.25, 0.7, 900);
@@ -200,11 +364,21 @@ export class AudioEngine {
 
   playVictorySound() {
     this.init();
-    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
-    notes.forEach((freq, i) => {
-      this.playTone(freq, 'sine', 0.4, 0.5, i * 0.1);
-      this.playTone(freq * 0.5, 'triangle', 0.4, 0.3, i * 0.1);
+    const notes = [
+      { f: 523.25, t: 0, d: 0.2 }, // C5
+      { f: 659.25, t: 0.2, d: 0.2 }, // E5
+      { f: 783.99, t: 0.4, d: 0.2 }, // G5
+      { f: 1046.50, t: 0.6, d: 0.6 }, // C6
+      { f: 783.99, t: 0.75, d: 0.15 }, // G5
+      { f: 1046.50, t: 0.9, d: 0.8 }, // C6
+    ];
+    notes.forEach((note) => {
+      this.playTone(note.f, 'sawtooth', 0.25, note.d, note.t);
+      this.playTone(note.f, 'square', 0.15, note.d, note.t);
+      this.playTone(note.f * 0.5, 'triangle', 0.3, note.d, note.t);
     });
+    // Splash of noise like a cymbal crash
+    this.playNoise(0.6, 0.3, 4000, 0.6);
   }
 
   playDefeatSound() {
@@ -213,6 +387,13 @@ export class AudioEngine {
     notes.forEach((freq, i) => {
       this.playTone(freq, 'sawtooth', 0.4, 0.4, i * 0.15);
     });
+  }
+
+  playChainPulseSFX() {
+    this.init();
+    // A quick, distinct energetic pop/pulse sound
+    this.playToneSweep(600, 800, 'sine', 0.1, 0.4);
+    this.playTone(400, 'triangle', 0.15, 0.3);
   }
 
   // --- SPECIAL COMBO GEM & BOMB SOUND EFFECTS ---

@@ -69,21 +69,22 @@ export const analyzeMatches = (gems: Gem[], lastSwappedPos?: { row: number; col:
   const hRuns: { row: number; cols: number[]; type: GemType }[] = [];
   const vRuns: { col: number; rows: number[]; type: GemType }[] = [];
 
-  // 1. Scan Horizontal Runs
+  // 1. Scan Horizontal Runs (dark_void vertical gems cannot match horizontally)
   for (let r = 0; r < ROWS; r++) {
     let currentCols: number[] = [];
     let currentType: GemType | null = null;
 
     for (let c = 0; c < COLS; c++) {
       const gem = grid[r][c];
-      if (gem && gem.type === currentType) {
+      const isValidForHRun = gem && gem.special !== 'dark_void';
+      if (isValidForHRun && gem.type === currentType) {
         currentCols.push(c);
       } else {
         if (currentCols.length >= 3 && currentType) {
           hRuns.push({ row: r, cols: [...currentCols], type: currentType });
         }
-        currentCols = gem ? [c] : [];
-        currentType = gem ? gem.type : null;
+        currentCols = isValidForHRun ? [c] : [];
+        currentType = isValidForHRun ? gem.type : null;
       }
     }
     if (currentCols.length >= 3 && currentType) {
@@ -91,21 +92,22 @@ export const analyzeMatches = (gems: Gem[], lastSwappedPos?: { row: number; col:
     }
   }
 
-  // 2. Scan Vertical Runs
+  // 2. Scan Vertical Runs (light_holy horizontal gems cannot match vertically)
   for (let c = 0; c < COLS; c++) {
     let currentRows: number[] = [];
     let currentType: GemType | null = null;
 
     for (let r = 0; r < ROWS; r++) {
       const gem = grid[r][c];
-      if (gem && gem.type === currentType) {
+      const isValidForVRun = gem && gem.special !== 'light_holy';
+      if (isValidForVRun && gem.type === currentType) {
         currentRows.push(r);
       } else {
         if (currentRows.length >= 3 && currentType) {
           vRuns.push({ col: c, rows: [...currentRows], type: currentType });
         }
-        currentRows = gem ? [r] : [];
-        currentType = gem ? gem.type : null;
+        currentRows = isValidForVRun ? [r] : [];
+        currentType = isValidForVRun ? gem.type : null;
       }
     }
     if (currentRows.length >= 3 && currentType) {
@@ -219,6 +221,29 @@ export const getConnectedSameTypeCluster = (gems: Gem[], start: Gem): Gem[] => {
   }
 
   return cluster;
+};
+
+export const shuffleGems = (gems: Gem[]): Gem[] => {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const shuffled = [...gems];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      
+      // Swap properties but keep row/col the same to shuffle in place
+      const tempType = shuffled[i].type;
+      const tempSpecial = shuffled[i].special;
+      const tempId = shuffled[i].id;
+      
+      shuffled[i] = { ...shuffled[i], type: shuffled[j].type, special: shuffled[j].special, id: shuffled[j].id };
+      shuffled[j] = { ...shuffled[j], type: tempType, special: tempSpecial, id: tempId };
+    }
+    
+    if (findMatches(shuffled).size === 0 && findHint(shuffled)) {
+      return shuffled;
+    }
+  }
+  // Fallback if we can't find a perfect shuffle
+  return generateSolvableGrid();
 };
 
 export const isAdjacent = (g1: Gem, g2: Gem): boolean => {

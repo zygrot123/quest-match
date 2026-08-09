@@ -53,15 +53,52 @@ export interface PlayerStats {
 
 export type MapNodeType = 'combat' | 'rest' | 'shop';
 
-export type EnemyType = 'goblin' | 'slime' | 'imp' | 'skeleton' | 'dragon' | 'elf' | 'golem';
+export type EnemyType = 
+  | 'goblin' 
+  | 'slime' 
+  | 'imp' 
+  | 'skeleton' 
+  | 'dragon' 
+  | 'elf' 
+  | 'golem'
+  | 'minotaur'
+  | 'mummy'
+  | 'specter'
+  | 'kraken'
+  | 'phoenix'
+  | 'gargoyle'
+  | 'vampire'
+  | 'hydra';
+
+export type HeroGender = 'male' | 'female';
+
+export interface HeroProfile {
+  id: string;
+  name: string;
+  gender: HeroGender;
+  title: string;
+  avatar?: string;
+  portrait?: string;
+  description: string;
+  startingTrait?: string;
+  perk?: string;
+  stats?: {
+    atkBonus?: number;
+    hpBonus?: number;
+    critBonus?: number;
+    elementBoost?: string;
+  };
+}
 
 export interface MapNode {
   id: string;
   type: MapNodeType;
-  level: number;
+  level?: number;
+  layer?: number;
   enemyType?: EnemyType;
   isBoss?: boolean;
-  completed: boolean;
+  isMiniBoss?: boolean;
+  completed?: boolean;
   children?: number[];
 }
 
@@ -71,8 +108,24 @@ export interface ShopItem {
   sold: boolean;
 }
 
+export interface ChapterInfo {
+  chapterNumber: number;
+  title: string;
+  subtitle: string;
+  location: string;
+  description: string;
+  boardTheme: 'emerald' | 'lava' | 'ice' | 'void' | 'golden' | 'gothic' | 'mystic' | 'abyssal';
+  bossEnemy: EnemyType;
+  miniBossEnemy: EnemyType;
+  mobs: EnemyType[];
+}
+
 export interface GameState {
-  status: 'menu' | 'playing' | 'gameover' | 'victory' | 'store' | 'map' | 'rest' | 'shop' | 'bossIntro';
+  status: 'characterSelect' | 'storyIntro' | 'menu' | 'playing' | 'gameover' | 'victory' | 'store' | 'map' | 'rest' | 'shop' | 'bossIntro';
+  heroGender: HeroGender;
+  heroName: string;
+  chapter: number; // 1 - 20
+  stage: number;   // 1 - 10
   enemyMaxHp: number;
   enemyHp: number;
   playerMaxHp: number;
@@ -83,6 +136,7 @@ export interface GameState {
   gold: number;
   crystals: number;
   enemyType: EnemyType;
+  isMiniBoss?: boolean;
   bossAbilityCooldown: number;
   bossStunTimer: number;
   
@@ -106,4 +160,5 @@ export interface DamageNumber {
   x: number;
   y: number;
 }
+
 

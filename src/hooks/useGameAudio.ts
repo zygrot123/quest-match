@@ -114,6 +114,10 @@ export function useGameAudio(options: UseGameAudioOptions = { autoInitOnInteract
     audio.playCritSFX();
   }, []);
 
+  const playChainPulseSFX = useCallback(() => {
+    audio.playChainPulseSFX();
+  }, []);
+
   const toggleBGM = useCallback(() => {
     return audio.toggleBGM();
   }, []);
@@ -145,6 +149,7 @@ export function useGameAudio(options: UseGameAudioOptions = { autoInitOnInteract
     playLightSFX,
     playDarkSFX,
     playCritSFX,
+    playChainPulseSFX,
     toggleBGM,
     startBGM,
     stopBGM,
