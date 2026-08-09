@@ -37,7 +37,7 @@ const getEnemyInfo = (type: EnemyType) => {
   }
 };
 
-const MAX_GEM_SIZE = 44;
+const MAX_GEM_SIZE = 60;
 const MIN_GEM_SIZE = 26;
 // Padding (px) inside the board's wrapper elements, subtracted from the measured
 // container box to get the space actually usable by the grid itself.
@@ -1887,7 +1887,7 @@ export default function App() {
           </div>
 
           <div className="w-full flex-1 min-h-0 p-4 pb-8 flex justify-center z-20">
-            <div ref={boardWrapperRef} className="w-full h-full max-w-[400px] backdrop-blur-xl bg-slate-950/60 border border-white/10 rounded-[40px] p-4 flex items-center justify-center shadow-2xl">
+            <div ref={boardWrapperRef} className="w-full h-full max-w-[460px] backdrop-blur-xl bg-slate-950/60 border border-white/10 rounded-[40px] p-4 flex items-center justify-center shadow-2xl">
               <div id="gem-grid-container" className="relative" style={{ width: COLS * GEM_SIZE + 8, height: ROWS * GEM_SIZE + 8 }}>
                 <AnimatePresence>
                   {gems.map(gem => (
