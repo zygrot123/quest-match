@@ -1682,7 +1682,7 @@ export default function App() {
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="w-full flex items-center justify-between p-4 backdrop-blur-xl bg-slate-950/60 border-b border-white/10 shadow-sm z-10">
+          <div className="w-full flex items-center justify-between p-3 backdrop-blur-xl bg-slate-950/60 border-b border-white/10 shadow-sm z-10">
             <div className="flex flex-col gap-2 w-2/3">
               <div className="flex items-center gap-3">
                  <div className="bg-red-500/20 border border-red-500/40 rounded-full px-2 py-0.5 flex items-center gap-1 shadow-inner shrink-0">
@@ -1738,7 +1738,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="w-full flex justify-center py-4 gap-3 z-10">
+          <div className="w-full flex justify-center py-1.5 gap-3 z-10">
              {[0, 1, 2].map(i => (
                 <div key={i} className={cn(
                    "w-8 h-2 rounded-full transition-colors shadow-sm",
@@ -1748,7 +1748,7 @@ export default function App() {
           </div>
 
           <div className="w-full shrink-0 flex flex-col items-center justify-center relative px-4 z-10">
-            <div className="backdrop-blur-xl bg-slate-950/80 border border-slate-800 rounded-3xl p-3 flex flex-col items-center justify-center relative w-full max-w-[340px] shadow-[0_0_50px_rgba(0,0,0,0.8)]">
+            <div className="backdrop-blur-xl bg-slate-950/80 border border-slate-800 rounded-3xl p-2.5 flex flex-col items-center justify-center relative w-full max-w-[340px] shadow-[0_0_50px_rgba(0,0,0,0.8)]">
               {/* Card Header Badges */}
               <div className="w-full flex items-center justify-between mb-1">
                 <span className={cn(
@@ -1769,14 +1769,14 @@ export default function App() {
               </div>
 
               {/* Boss/Enemy Name Banner */}
-              <div className="w-full text-center py-1 my-0.5 bg-gradient-to-r from-red-950/50 via-slate-900/80 to-red-950/50 border-y border-red-500/30 rounded-lg">
+              <div className="w-full text-center py-0.5 my-0.5 bg-gradient-to-r from-red-950/50 via-slate-900/80 to-red-950/50 border-y border-red-500/30 rounded-lg">
                 <span className="text-base font-pixel tracking-widest text-amber-300 drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] uppercase">
                   {getEnemyInfo(gameState.enemyType).name}
                 </span>
               </div>
               
               {/* Boss/Enemy Sprite Frame */}
-              <div className="w-full h-[110px] flex items-center justify-center relative my-1 rounded-2xl bg-slate-900/40 border border-white/10 shadow-inner overflow-visible">
+              <div className="w-full h-[72px] flex items-center justify-center relative my-1 rounded-2xl bg-slate-900/40 border border-white/10 shadow-inner overflow-visible">
                  <div className="flex items-center justify-center pointer-events-none w-full h-full">
                    <BossModel 
                      type={gameState.enemyType} 
@@ -1801,7 +1801,7 @@ export default function App() {
                   'shadow-[0_0_20px_rgba(16,185,129,0.2)] border-emerald-500/40 bg-slate-950/95';
 
                 return (
-                  <div className={cn("w-full rounded-xl p-1.5 my-1.5 grid grid-cols-2 gap-1.5 text-[10px] font-black uppercase tracking-wider shadow-xl border relative overflow-hidden transition-all duration-500", auraGlow)}>
+                  <div className={cn("w-full rounded-xl p-1.5 my-1 grid grid-cols-2 gap-1.5 text-[10px] font-black uppercase tracking-wider shadow-xl border relative overflow-hidden transition-all duration-500", auraGlow)}>
                     {/* Weakness Indicator Pill */}
                     <div className="flex items-center justify-between bg-black/60 px-2 py-1.5 rounded-lg border border-white/10 relative z-10 overflow-hidden min-w-0">
                       <span className="text-white/50 text-[9px] font-extrabold shrink-0 mr-1">WEAK:</span>
@@ -1870,7 +1870,7 @@ export default function App() {
               })()}
 
               {/* Boss Health Bar */}
-              <div className="w-full space-y-1 mt-1">
+              <div className="w-full space-y-1 mt-0.5">
                  <div className="flex justify-between text-[10px] uppercase font-bold tracking-wider text-red-400">
                    <span>Boss HP</span>
                    <span>{Math.max(0, gameState.enemyHp)} / {gameState.enemyMaxHp}</span>
@@ -1886,7 +1886,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="w-full flex-1 min-h-0 p-4 pb-8 flex justify-center z-20">
+          <div className="w-full flex-1 min-h-0 p-3 pb-5 flex justify-center z-20">
             <div ref={boardWrapperRef} className="w-full h-full max-w-[460px] backdrop-blur-xl bg-slate-950/60 border border-white/10 rounded-[40px] p-4 flex items-center justify-center shadow-2xl">
               <div id="gem-grid-container" className="relative" style={{ width: COLS * GEM_SIZE + 8, height: ROWS * GEM_SIZE + 8 }}>
                 <AnimatePresence>
