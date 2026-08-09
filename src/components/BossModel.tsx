@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import dragonImg from '../assets/images/dragon_spritesheet_1786209780891.jpg';
-import elfImg from '../assets/images/elf_spritesheet_1786209795354.jpg';
-import golemImg from '../assets/images/golem_spritesheet_1786209813745.jpg';
-import goblinImg from '../assets/images/goblin_spritesheet_1786216397754.jpg';
-import slimeImg from '../assets/images/slime_spritesheet_1786216412229.jpg';
-import impImg from '../assets/images/imp_spritesheet_1786216425329.jpg';
-import skeletonImg from '../assets/images/skeleton_spritesheet_1786216438358.jpg';
-import minotaurImg from '../assets/images/minotaur_boss_sprite_1786283663794.jpg';
-import phoenixImg from '../assets/images/phoenix_boss_sprite_1786283681083.jpg';
-import vampireImg from '../assets/images/vampire_boss_spritesheet_1786294900054.jpg';
-import krakenImg from '../assets/images/kraken_boss_spritesheet_1786294916810.jpg';
+import dragonImg from '../assets/images/dragon_spritesheet.png';
+import elfImg from '../assets/images/elf_spritesheet.png';
+import golemImg from '../assets/images/golem_spritesheet.png';
+import goblinImg from '../assets/images/goblin_spritesheet.png';
+import slimeImg from '../assets/images/slime_spritesheet.png';
+import impImg from '../assets/images/imp_spritesheet.png';
+import skeletonImg from '../assets/images/skeleton_spritesheet.png';
+import minotaurImg from '../assets/images/minotaur_boss_sprite.png';
+import phoenixImg from '../assets/images/phoenix_boss_sprite.png';
+import vampireImg from '../assets/images/vampire_boss_spritesheet.png';
+import krakenImg from '../assets/images/kraken_boss_spritesheet.png';
 import { EnemyType } from '../types';
 import { cn } from '../utils';
 import { speakMobTaunt } from '../utils/mobTaunts';
@@ -251,7 +251,6 @@ export const BossModel: React.FC<BossModelProps> = ({
             backgroundSize: '400% 300%',
             backgroundPosition: `${(frame / 3) * 100}% ${(currentRow / 2) * 100}%`,
             imageRendering: 'pixelated',
-            mixBlendMode: 'screen',
             transform: 'translateZ(30px)'
           }}
         />
