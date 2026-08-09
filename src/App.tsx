@@ -38,19 +38,25 @@ const getEnemyInfo = (type: EnemyType) => {
 };
 
 const MAX_GEM_SIZE = 44;
-// Board padding/margins to subtract from viewport when computing the max gem size that fits.
-const BOARD_HORIZONTAL_PADDING = 64; // outer card padding + backdrop padding (both sides)
-const BOARD_VERTICAL_RESERVED = 340; // space taken by header, HUD, boss area, bottom bar, etc.
+const MIN_GEM_SIZE = 26;
+// Padding (px) inside the board's wrapper elements, subtracted from the measured
+// container box to get the space actually usable by the grid itself.
+const BOARD_WRAPPER_PADDING = 16 * 2; // backdrop wrapper's p-4 (left+right, top+bottom)
+const BOARD_INNER_PADDING = 8; // gem-grid-container's own "+8" sizing
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-/** Computes a gem size that fits the current viewport, capped at MAX_GEM_SIZE. */
-const computeGemSize = () => {
-  if (typeof window === 'undefined') return MAX_GEM_SIZE;
-  const availableWidth = window.innerWidth - BOARD_HORIZONTAL_PADDING;
-  const availableHeight = window.innerHeight - BOARD_VERTICAL_RESERVED;
-  const sizeFromWidth = Math.floor(availableWidth / COLS);
-  const sizeFromHeight = Math.floor(availableHeight / ROWS);
-  return Math.max(24, Math.min(MAX_GEM_SIZE, sizeFromWidth, sizeFromHeight));
+/**
+ * Computes the largest gem size that fits inside a measured container box,
+ * instead of guessing how much vertical space the rest of the UI takes up.
+ * This stays correct across screens (boss battles, different HUD heights),
+ * orientations, and devices, since it's based on real measured layout space.
+ */
+const computeGemSizeForContainer = (containerWidth: number, containerHeight: number) => {
+  const usableWidth = containerWidth - BOARD_WRAPPER_PADDING - BOARD_INNER_PADDING;
+  const usableHeight = containerHeight - BOARD_WRAPPER_PADDING - BOARD_INNER_PADDING;
+  const sizeFromWidth = Math.floor(usableWidth / COLS);
+  const sizeFromHeight = Math.floor(usableHeight / ROWS);
+  return Math.max(MIN_GEM_SIZE, Math.min(MAX_GEM_SIZE, sizeFromWidth, sizeFromHeight));
 };
 
 const GEM_ICON_COLORS: Record<GemType, string> = {
@@ -97,19 +103,30 @@ export default function App() {
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [selectedEqModal, setSelectedEqModal] = useState<Equipment | null>(null);
 
-  // GEM_SIZE now scales to the actual device viewport instead of being a fixed
-  // pixel constant, so the board fits real phone screens instead of overflowing
-  // or looking oversized relative to everything else.
-  const [GEM_SIZE, setGemSize] = useState(computeGemSize);
+  // GEM_SIZE now scales to whatever space Flexbox actually gives the board
+  // wrapper (boardWrapperRef), rather than being a fixed pixel constant or a
+  // guessed "reserved space" number. This stays correct even when the HUD
+  // above the board (boss card, HP bars, etc.) varies in height between screens.
+  const [GEM_SIZE, setGemSize] = useState(MAX_GEM_SIZE);
+  const boardWrapperRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const handleResize = () => setGemSize(computeGemSize());
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleResize);
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleResize);
+    const el = boardWrapperRef.current;
+    if (!el) return;
+    const recompute = () => {
+      const { width, height } = el.getBoundingClientRect();
+      if (width > 0 && height > 0) {
+        setGemSize(computeGemSizeForContainer(width, height));
+      }
     };
-  }, []);
+    recompute();
+    const observer = new ResizeObserver(recompute);
+    observer.observe(el);
+    window.addEventListener('orientationchange', recompute);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('orientationchange', recompute);
+    };
+  }, [gameState.status]);
 
   const gameStateRef = useRef(gameState);
   useEffect(() => {
@@ -1693,7 +1710,7 @@ export default function App() {
              ))}
           </div>
 
-          <div className="flex-1 w-full flex flex-col items-center justify-center relative px-4 z-10">
+          <div className="w-full shrink-0 flex flex-col items-center justify-center relative px-4 z-10">
             <div className="backdrop-blur-xl bg-slate-950/80 border border-slate-800 rounded-3xl p-5 flex flex-col items-center justify-center relative w-full max-w-[340px] shadow-[0_0_50px_rgba(0,0,0,0.8)]">
               {/* Card Header Badges */}
               <div className="w-full flex items-center justify-between mb-1.5">
@@ -1832,8 +1849,8 @@ export default function App() {
             </div>
           </div>
 
-          <div className="w-full p-4 pb-8 flex justify-center z-20">
-            <div className="backdrop-blur-xl bg-slate-950/60 border border-white/10 rounded-[40px] p-4 flex items-center justify-center shadow-2xl">
+          <div className="w-full flex-1 min-h-0 p-4 pb-8 flex justify-center z-20">
+            <div ref={boardWrapperRef} className="w-full h-full max-w-[400px] backdrop-blur-xl bg-slate-950/60 border border-white/10 rounded-[40px] p-4 flex items-center justify-center shadow-2xl">
               <div id="gem-grid-container" className="relative" style={{ width: COLS * GEM_SIZE + 8, height: ROWS * GEM_SIZE + 8 }}>
                 <AnimatePresence>
                   {gems.map(gem => (
