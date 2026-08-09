@@ -110,9 +110,9 @@ const useTransparentSprite = (src: string, skip = false) => {
 
       ctx.putImageData(imageData, 0, 0);
       const result = canvas.toDataURL('image/png');
-      transparentSpriteCache.set(src, src);
+      transparentSpriteCache.set(src, result);
       if (!cancelled) {
-        setTransparentSrc(src);
+        setTransparentSrc(result);
       }
     };
 
