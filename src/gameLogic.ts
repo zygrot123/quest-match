@@ -168,6 +168,45 @@ export const findMatches = (gems: Gem[]): Set<string> => {
   return analyzeMatches(gems).matchedIds;
 };
 
+// Finds every gem orthogonally connected (up/down/left/right, transitively)
+// to the given start gem that shares its element. Used by the bomb special so
+// its blast only claims one unbroken patch of its own color, instead of
+// clearing a fixed area regardless of what's actually touching it.
+export const getConnectedSameTypeCluster = (gems: Gem[], start: Gem): Gem[] => {
+  const grid = new Array(ROWS).fill(null).map(() => new Array(COLS).fill(null)) as (Gem | null)[][];
+  gems.forEach(g => {
+    if (g.row >= 0 && g.row < ROWS && g.col >= 0 && g.col < COLS) {
+      grid[g.row][g.col] = g;
+    }
+  });
+
+  const visited = new Set<string>();
+  const cluster: Gem[] = [];
+  const stack: Gem[] = [start];
+
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    const key = `${cur.row},${cur.col}`;
+    if (visited.has(key)) continue;
+    visited.add(key);
+    cluster.push(cur);
+
+    const neighbors = [
+      cur.row > 0 ? grid[cur.row - 1][cur.col] : null,
+      cur.row < ROWS - 1 ? grid[cur.row + 1][cur.col] : null,
+      cur.col > 0 ? grid[cur.row][cur.col - 1] : null,
+      cur.col < COLS - 1 ? grid[cur.row][cur.col + 1] : null,
+    ];
+    neighbors.forEach(n => {
+      if (n && n.type === start.type && !visited.has(`${n.row},${n.col}`)) {
+        stack.push(n);
+      }
+    });
+  }
+
+  return cluster;
+};
+
 export const isAdjacent = (g1: Gem, g2: Gem): boolean => {
   const dr = Math.abs(g1.row - g2.row);
   const dc = Math.abs(g1.col - g2.col);

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Heart, Coins, Play, RefreshCw, ShoppingCart, Crown, XCircle, Trophy, Skull, Map, Shield, Sword, Flame, Droplet, Leaf, Sparkles, Info, Package, Volume2, VolumeX } from 'lucide-react';
 import { Gem, GameState, DamageNumber, GemType, MapNode, EquipmentSlot, Equipment, ShopItem, EnemyType, SpecialGemType } from './types';
-import { generateGrid, findMatches, analyzeMatches, isAdjacent, createRandomGem, findHint } from './gameLogic';
+import { generateGrid, findMatches, analyzeMatches, isAdjacent, createRandomGem, findHint, getConnectedSameTypeCluster } from './gameLogic';
 import { generateMap, generateRandomEquipment, calculateTotalStats, getRarityColor, getRarityBadge, getItemPrice } from './roguelike';
 import { ROWS, COLS, MATCH_DELAY, DROP_DELAY, SWIPE_LIMIT } from './constants';
 import { GemIcon } from './components/GemIcon';
@@ -275,9 +275,11 @@ export default function App() {
             if (g.special) explodeQueue.push(g);
           });
         } else if (g1.special === 'bomb_3x3' && g2.special === 'bomb_3x3') {
-          // Mega 5x5 Bomb!
+          // Mega Bomb! Two bombs combine, but still only claim the connected
+          // patch of gems sharing the destination bomb's element — a same-gem
+          // area clear, not an indiscriminate nuke of whatever else is nearby.
           hasBomb = true;
-          currentGems.filter(g => Math.abs(g.row - g2.row) <= 2 && Math.abs(g.col - g2.col) <= 2).forEach(g => {
+          getConnectedSameTypeCluster(currentGems, g2).forEach(g => {
             finalMatchedIds.add(g.id);
             if (g.special) explodeQueue.push(g);
           });
@@ -341,8 +343,11 @@ export default function App() {
           }
         });
       } else if (g.special === 'bomb_3x3') {
+        // Only claim the connected patch of gems sharing the bomb's own
+        // element — a same-gem area clear, not an indiscriminate nuke of
+        // whatever else happens to be sitting nearby.
         hasBomb = true;
-        currentGems.filter(other => Math.abs(other.row - g.row) <= 1 && Math.abs(other.col - g.col) <= 1).forEach(other => {
+        getConnectedSameTypeCluster(currentGems, g).forEach(other => {
           finalMatchedIds.add(other.id);
           if (other.special && !processedSpecialIds.has(other.id)) {
             explodeQueue.push(other);
