@@ -6,9 +6,9 @@ import golemImg from '../assets/images/golem_spritesheet.png';
 import goblinImg from '../assets/images/goblin_spritesheet.png';
 import slimeImg from '../assets/images/slime_spritesheet.png';
 import impImg from '../assets/images/imp_spritesheet.png';
-import skeletonImg from '../assets/images/skeleton_spritesheet.png';
+import skeletonImg from '../assets/images/skeleton_spritesheet_clean.png';
 import minotaurImg from '../assets/images/minotaur_boss_sprite.png';
-import phoenixImg from '../assets/images/phoenix_boss_sprite.png';
+import phoenixImg from '../assets/images/phoenix_boss_sprite_clean.png';
 import vampireImg from '../assets/images/vampire_boss_spritesheet.png';
 import krakenImg from '../assets/images/kraken_boss_spritesheet.png';
 import { EnemyType } from '../types';
@@ -35,13 +35,15 @@ export const BossModel: React.FC<BossModelProps> = ({
   const [dialogue, setDialogue] = useState<string | null>(null);
   const [frame, setFrame] = useState(0);
 
-  // Cycle sprite sheet frames (4 frames per row: 0, 1, 2, 3)
+  // Cycle sprite-sheet frames. Resetting on state changes makes attacks/hits always
+  // start on their first pose instead of jumping in halfway through the animation.
   useEffect(() => {
+    setFrame(0);
     const interval = setInterval(() => {
       setFrame(f => (f + 1) % 4);
-    }, isAttacking ? 110 : isHit ? 90 : 150);
+    }, isAttacking ? 95 : isHit ? 85 : 165);
     return () => clearInterval(interval);
-  }, [isAttacking, isHit]);
+  }, [isAttacking, isHit, type]);
 
   // Handle battle taunts
   useEffect(() => {
@@ -85,6 +87,19 @@ export const BossModel: React.FC<BossModelProps> = ({
       filter: 'brightness(1.6) contrast(1.4) drop-shadow(0px 15px 30px rgba(251,191,36,0.95))',
       transition: { duration: 0.5, ease: "easeInOut" }
     }
+  };
+
+  // These two bosses were supplied as single illustrations rather than sprite sheets.
+  // Give them deliberate, character-specific motion instead of incorrectly slicing the art
+  // into 4x3 frames. This keeps the existing working sprite-sheet enemies untouched.
+  const singleImageVariants = type === 'phoenix' ? {
+    idle: { y: [-8, 6, -8], scale: [0.98, 1.03, 0.98], rotateZ: [-1.5, 1.5, -1.5], filter: 'brightness(1.12) saturate(1.18) drop-shadow(0 10px 28px rgba(249,115,22,0.75))', transition: { repeat: Infinity, duration: 2.1, ease: 'easeInOut' } },
+    attack: { y: [10, -18, 8, 0], x: [0, -18, 28, 0], scale: [1, 1.12, 1.22, 1], rotateZ: [0, -7, 9, 0], filter: 'brightness(1.55) saturate(1.35) drop-shadow(0 0 35px rgba(251,146,60,1))', transition: { duration: 0.65, ease: 'easeOut' } },
+    hit: { x: [-10, 14, -8, 0], rotateZ: [-4, 5, -3, 0], scale: [1, 1.08, 0.94, 1], filter: 'brightness(1.9) saturate(1.4) drop-shadow(0 0 30px rgba(239,68,68,1))', transition: { duration: 0.38, ease: 'easeOut' } },
+  } : {
+    idle: { y: [3, -3, 3], scale: [1, 1.015, 1], rotateZ: [-0.8, 0.8, -0.8], filter: 'brightness(1.08) contrast(1.12) drop-shadow(0 12px 24px rgba(180,83,9,0.55))', transition: { repeat: Infinity, duration: 2.4, ease: 'easeInOut' } },
+    attack: { y: [0, -12, 14, 0], x: [0, -22, 32, 0], scale: [1, 1.06, 1.18, 1], rotateZ: [0, -5, 7, 0], filter: 'brightness(1.45) contrast(1.2) drop-shadow(0 0 34px rgba(245,158,11,0.9))', transition: { duration: 0.62, ease: 'easeOut' } },
+    hit: { x: [-12, 16, -9, 0], rotateZ: [-5, 6, -3, 0], scale: [1, 1.06, 0.94, 1], filter: 'brightness(1.8) contrast(1.25) drop-shadow(0 0 26px rgba(239,68,68,0.95))', transition: { duration: 0.36, ease: 'easeOut' } },
   };
 
   const currentState = isHit ? 'hit' : isAttacking ? 'attack' : 'idle';
@@ -132,6 +147,7 @@ export const BossModel: React.FC<BossModelProps> = ({
   };
 
   const activeSpriteUrl = getImgSrc();
+  const isSingleImageEnemy = type === 'minotaur' || type === 'phoenix';
   const currentRow = isHit ? 2 : isAttacking ? 1 : 0;
 
   return (
@@ -240,20 +256,32 @@ export const BossModel: React.FC<BossModelProps> = ({
       {/* 3D Animated Pixel Sprite Container */}
       <motion.div 
         variants={variants} 
-        animate={currentState}
+        animate={isSingleImageEnemy ? undefined : currentState}
         className="relative z-10 w-[145px] h-[145px] flex items-center justify-center transform-gpu select-none"
         style={{ transformStyle: 'preserve-3d' }}
       >
-        <div 
-          className="w-full h-full drop-shadow-[0_12px_22px_rgba(0,0,0,0.95)] transform-gpu"
-          style={{
-            backgroundImage: `url(${activeSpriteUrl})`,
-            backgroundSize: '400% 300%',
-            backgroundPosition: `${(frame / 3) * 100}% ${(currentRow / 2) * 100}%`,
-            imageRendering: 'pixelated',
-            transform: 'translateZ(30px)'
-          }}
-        />
+        {isSingleImageEnemy ? (
+          <motion.img
+            src={activeSpriteUrl}
+            alt=""
+            draggable={false}
+            variants={singleImageVariants}
+            animate={currentState}
+            className="w-full h-full object-contain drop-shadow-[0_12px_22px_rgba(0,0,0,0.95)] transform-gpu select-none"
+            style={{ imageRendering: 'pixelated', transform: 'translateZ(30px)' }}
+          />
+        ) : (
+          <div 
+            className="w-full h-full drop-shadow-[0_12px_22px_rgba(0,0,0,0.95)] transform-gpu"
+            style={{
+              backgroundImage: `url(${activeSpriteUrl})`,
+              backgroundSize: '400% 300%',
+              backgroundPosition: `${(frame / 3) * 100}% ${(currentRow / 2) * 100}%`,
+              imageRendering: 'pixelated',
+              transform: 'translateZ(30px)'
+            }}
+          />
+        )}
 
         {/* Attack 3D Slash Energy Arcs */}
         {isAttacking && (
