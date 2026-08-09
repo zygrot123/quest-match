@@ -1,0 +1,175 @@
+import { Gem, GemType, SpecialGemType } from './types';
+import { ROWS, COLS } from './constants';
+
+export const GEM_TYPES: GemType[] = ['sword', 'fire', 'water', 'earth', 'heart', 'light', 'dark'];
+
+export const createRandomGem = (row: number, col: number): Gem => ({
+  id: Math.random().toString(36).substring(2, 11),
+  type: GEM_TYPES[Math.floor(Math.random() * GEM_TYPES.length)],
+  row,
+  col,
+});
+
+export const generateGrid = (): Gem[] => {
+  const grid: Gem[][] = [];
+  for (let r = 0; r < ROWS; r++) {
+    const row: Gem[] = [];
+    for (let c = 0; c < COLS; c++) {
+      let gem;
+      do {
+        gem = createRandomGem(r, c);
+      } while (
+        (r >= 2 && grid[r - 1][c].type === gem.type && grid[r - 2][c].type === gem.type) ||
+        (c >= 2 && row[c - 1].type === gem.type && row[c - 2].type === gem.type)
+      );
+      row.push(gem);
+    }
+    grid.push(row);
+  }
+  return grid.flat();
+};
+
+export interface SpecialGemCreation {
+  row: number;
+  col: number;
+  gemType: GemType;
+  specialType: SpecialGemType;
+}
+
+export interface MatchAnalysis {
+  matchedIds: Set<string>;
+  specialsToCreate: SpecialGemCreation[];
+}
+
+export const analyzeMatches = (gems: Gem[], lastSwappedPos?: { row: number; col: number }): MatchAnalysis => {
+  const matchedIds = new Set<string>();
+  const specialsToCreate: SpecialGemCreation[] = [];
+
+  const grid = new Array(ROWS).fill(null).map(() => new Array(COLS).fill(null)) as (Gem | null)[][];
+  gems.forEach(g => {
+    if (g.row >= 0 && g.row < ROWS && g.col >= 0 && g.col < COLS) {
+      grid[g.row][g.col] = g;
+    }
+  });
+
+  const hRuns: { row: number; cols: number[]; type: GemType }[] = [];
+  const vRuns: { col: number; rows: number[]; type: GemType }[] = [];
+
+  // 1. Scan Horizontal Runs
+  for (let r = 0; r < ROWS; r++) {
+    let currentCols: number[] = [];
+    let currentType: GemType | null = null;
+
+    for (let c = 0; c < COLS; c++) {
+      const gem = grid[r][c];
+      if (gem && gem.type === currentType) {
+        currentCols.push(c);
+      } else {
+        if (currentCols.length >= 3 && currentType) {
+          hRuns.push({ row: r, cols: [...currentCols], type: currentType });
+        }
+        currentCols = gem ? [c] : [];
+        currentType = gem ? gem.type : null;
+      }
+    }
+    if (currentCols.length >= 3 && currentType) {
+      hRuns.push({ row: r, cols: [...currentCols], type: currentType });
+    }
+  }
+
+  // 2. Scan Vertical Runs
+  for (let c = 0; c < COLS; c++) {
+    let currentRows: number[] = [];
+    let currentType: GemType | null = null;
+
+    for (let r = 0; r < ROWS; r++) {
+      const gem = grid[r][c];
+      if (gem && gem.type === currentType) {
+        currentRows.push(r);
+      } else {
+        if (currentRows.length >= 3 && currentType) {
+          vRuns.push({ col: c, rows: [...currentRows], type: currentType });
+        }
+        currentRows = gem ? [r] : [];
+        currentType = gem ? gem.type : null;
+      }
+    }
+    if (currentRows.length >= 3 && currentType) {
+      vRuns.push({ col: c, rows: [...currentRows], type: currentType });
+    }
+  }
+
+  // Collect all matched IDs
+  hRuns.forEach(run => run.cols.forEach(c => {
+    const g = grid[run.row][c];
+    if (g) matchedIds.add(g.id);
+  }));
+  vRuns.forEach(run => run.rows.forEach(r => {
+    const g = grid[r][run.col];
+    if (g) matchedIds.add(g.id);
+  }));
+
+  // Helper to pick target position for Special Gem spawn
+  const chooseTargetPos = (candidatePositions: { row: number; col: number }[]) => {
+    if (lastSwappedPos) {
+      const foundSwapped = candidatePositions.find(p => p.row === lastSwappedPos.row && p.col === lastSwappedPos.col);
+      if (foundSwapped) return foundSwapped;
+    }
+    // Default to middle position of run
+    return candidatePositions[Math.floor(candidatePositions.length / 2)];
+  };
+
+  // Check for T / L Intersections (3x3 Bomb creation)
+  hRuns.forEach(hRun => {
+    vRuns.forEach(vRun => {
+      if (hRun.type === vRun.type && hRun.cols.includes(vRun.col) && vRun.rows.includes(hRun.row)) {
+        const intersectionPos = { row: hRun.row, col: vRun.col };
+        specialsToCreate.push({
+          row: intersectionPos.row,
+          col: intersectionPos.col,
+          gemType: hRun.type,
+          specialType: 'bomb_3x3'
+        });
+      }
+    });
+  });
+
+  // If no intersection bomb created, check individual runs
+  if (specialsToCreate.length === 0) {
+    hRuns.forEach(run => {
+      const coords = run.cols.map(c => ({ row: run.row, col: c }));
+      const target = chooseTargetPos(coords);
+      if (run.cols.length === 4) {
+        specialsToCreate.push({ ...target, gemType: run.type, specialType: 'light_holy' });
+      } else if (run.cols.length >= 5) {
+        specialsToCreate.push({ ...target, gemType: run.type, specialType: 'rainbow' });
+      }
+    });
+
+    vRuns.forEach(run => {
+      const coords = run.rows.map(r => ({ row: r, col: run.col }));
+      const target = chooseTargetPos(coords);
+      if (run.rows.length === 4) {
+        if (!specialsToCreate.some(s => s.row === target.row && s.col === target.col)) {
+          specialsToCreate.push({ ...target, gemType: run.type, specialType: 'dark_void' });
+        }
+      } else if (run.rows.length >= 5) {
+        if (!specialsToCreate.some(s => s.row === target.row && s.col === target.col)) {
+          specialsToCreate.push({ ...target, gemType: run.type, specialType: 'rainbow' });
+        }
+      }
+    });
+  }
+
+  return { matchedIds, specialsToCreate };
+};
+
+export const findMatches = (gems: Gem[]): Set<string> => {
+  return analyzeMatches(gems).matchedIds;
+};
+
+export const isAdjacent = (g1: Gem, g2: Gem): boolean => {
+  const dr = Math.abs(g1.row - g2.row);
+  const dc = Math.abs(g1.col - g2.col);
+  return (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
+};

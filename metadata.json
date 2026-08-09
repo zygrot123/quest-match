@@ -1,0 +1,6 @@
+{
+  "name": "Quest Match: Dragon's Lair",
+  "description": "A hybrid match-3 RPG game where you fight mystical bosses. Match elements to deal damage, manage your time, and avoid wrong swipes! Features a fully functional monetization mock.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
