@@ -173,3 +173,41 @@ export const isAdjacent = (g1: Gem, g2: Gem): boolean => {
   const dc = Math.abs(g1.col - g2.col);
   return (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
 };
+
+// Finds a legal swap that would create a match, for the "idle hint" nudge.
+// Tries every gem against its right and bottom neighbor, swaps them in a
+// throwaway copy of the board, and checks if that produces a match. Returns
+// the pair of gem ids to highlight, or null if the board has no valid move
+// (shouldn't normally happen since the grid is regenerated on stalemate).
+export const findHint = (gems: Gem[]): [string, string] | null => {
+  const grid = new Array(ROWS).fill(null).map(() => new Array(COLS).fill(null)) as (Gem | null)[][];
+  gems.forEach(g => {
+    if (g.row >= 0 && g.row < ROWS && g.col >= 0 && g.col < COLS) {
+      grid[g.row][g.col] = g;
+    }
+  });
+
+  const tryPair = (a: Gem, b: Gem): boolean => {
+    const swapped = gems.map(g => {
+      if (g.id === a.id) return { ...g, row: b.row, col: b.col };
+      if (g.id === b.id) return { ...g, row: a.row, col: a.col };
+      return g;
+    });
+    return findMatches(swapped).size > 0;
+  };
+
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const gem = grid[r][c];
+      if (!gem) continue;
+
+      const right = c + 1 < COLS ? grid[r][c + 1] : null;
+      if (right && tryPair(gem, right)) return [gem.id, right.id];
+
+      const down = r + 1 < ROWS ? grid[r + 1][c] : null;
+      if (down && tryPair(gem, down)) return [gem.id, down.id];
+    }
+  }
+
+  return null;
+};

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Heart, Coins, Play, RefreshCw, ShoppingCart, Crown, XCircle, Trophy, Skull, Map, Shield, Sword, Flame, Droplet, Leaf, Sparkles, Info, Package, Volume2, VolumeX } from 'lucide-react';
 import { Gem, GameState, DamageNumber, GemType, MapNode, EquipmentSlot, Equipment, ShopItem, EnemyType, SpecialGemType } from './types';
-import { generateGrid, findMatches, analyzeMatches, isAdjacent, createRandomGem } from './gameLogic';
+import { generateGrid, findMatches, analyzeMatches, isAdjacent, createRandomGem, findHint } from './gameLogic';
 import { generateMap, generateRandomEquipment, calculateTotalStats, getRarityColor, getRarityBadge, getItemPrice } from './roguelike';
 import { ROWS, COLS, MATCH_DELAY, DROP_DELAY, SWIPE_LIMIT } from './constants';
 import { GemIcon } from './components/GemIcon';
@@ -144,6 +144,20 @@ export default function App() {
   const [gems, setGems] = useState<Gem[]>([]);
   const [selectedGemId, setSelectedGemId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Idle hint: if the player hasn't made a move in a while, gently glow a
+  // valid 3-match so they can find one without hunting the whole board.
+  const IDLE_HINT_DELAY = 6000; // ms of inactivity before showing a hint
+  const [hintGemIds, setHintGemIds] = useState<string[]>([]);
+  useEffect(() => {
+    setHintGemIds([]); // any board/selection change clears the previous hint
+    if (gameState.status !== 'playing' || isProcessing) return;
+    const timer = setTimeout(() => {
+      const hint = findHint(gems);
+      if (hint) setHintGemIds(hint);
+    }, IDLE_HINT_DELAY);
+    return () => clearTimeout(timer);
+  }, [gems, isProcessing, gameState.status, selectedGemId]);
   const [damageNumbers, setDamageNumbers] = useState<DamageNumber[]>([]);
   const [enemyHit, setEnemyHit] = useState(false);
   const [enemyAttacking, setEnemyAttacking] = useState(false);
@@ -827,6 +841,14 @@ export default function App() {
              addDamageNumber(dmg, 'enemyAttack', window.innerWidth / 2, 80);
              setPlayerHit(true);
              setTimeout(() => setPlayerHit(false), 300);
+           } else {
+             // Minions (goblin/slime/imp/skeleton) don't have a unique gimmick like the
+             // bosses do, but their ability countdown still fires an attack — make sure
+             // it actually deals damage instead of silently doing nothing.
+             const dmg = Math.max(1, (10 + current.level * 3) - Math.floor(calculateTotalStats(current.stats, current.equipment).defense * 0.5));
+             addDamageNumber(dmg, 'enemyAttack', window.innerWidth / 2, 80);
+             setPlayerHit(true);
+             setTimeout(() => setPlayerHit(false), 300);
            }
            
            setGameState(prev => {
@@ -837,6 +859,10 @@ export default function App() {
                 nextState.enemyHp = Math.min(nextState.enemyMaxHp, nextState.enemyHp + 30);
               } else if (prev.enemyType === 'golem') {
                 const dmg = Math.max(1, 20 - Math.floor(calculateTotalStats(prev.stats, prev.equipment).defense * 0.5));
+                nextState.playerHp -= dmg;
+                if (nextState.playerHp <= 0) nextState.status = 'gameover';
+              } else {
+                const dmg = Math.max(1, (10 + prev.level * 3) - Math.floor(calculateTotalStats(prev.stats, prev.equipment).defense * 0.5));
                 nextState.playerHp -= dmg;
                 if (nextState.playerHp <= 0) nextState.status = 'gameover';
               }
@@ -1890,9 +1916,16 @@ export default function App() {
                           ? 'border-yellow-300 ring-1 ring-yellow-400/80 bg-gradient-to-tr from-yellow-950 via-amber-900 to-yellow-600 shadow-[0_0_12px_rgba(250,204,21,0.8)]'
                           : gem.special === 'dark_void'
                           ? 'border-purple-300 ring-1 ring-purple-400/80 bg-gradient-to-tr from-purple-950 via-indigo-900 to-purple-600 shadow-[0_0_12px_rgba(168,85,247,0.8)]'
+                          : hintGemIds.includes(gem.id)
+                          ? 'border-emerald-300 ring-2 ring-emerald-300/80 animate-pulse shadow-[0_0_16px_rgba(110,231,183,0.8)]'
                           : 'border-white/20 hover:bg-white/15 hover:border-white/40'
                       )}>
-                        <GemIcon type={gem.type} special={gem.special} className={cn("drop-shadow-lg", GEM_SIZE > 40 ? "w-6 h-6" : "w-5 h-5", GEM_ICON_COLORS[gem.type] || 'text-white')} />
+                        <GemIcon
+                          type={gem.type}
+                          special={gem.special}
+                          className={cn("drop-shadow-lg", GEM_ICON_COLORS[gem.type] || 'text-white')}
+                          style={{ width: GEM_SIZE * 0.72, height: GEM_SIZE * 0.72 }}
+                        />
                       </div>
                     </motion.div>
                   ))}
