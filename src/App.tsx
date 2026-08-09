@@ -45,6 +45,14 @@ const BOARD_WRAPPER_PADDING = 16 * 2; // backdrop wrapper's p-4 (left+right, top
 const BOARD_INNER_PADDING = 8; // gem-grid-container's own "+8" sizing
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+/** Names of every item the player currently owns (bag + equipped), used to steer new drops away from exact repeats. */
+const getOwnedItemNames = (state: GameState): Set<string> => {
+  const names = new Set<string>();
+  state.inventory.forEach(item => names.add(item.name));
+  Object.values(state.equipment).forEach(item => { if (item) names.add(item.name); });
+  return names;
+};
+
 /**
  * Computes the largest gem size that fits inside a measured container box,
  * instead of guessing how much vertical space the rest of the UI takes up.
@@ -584,7 +592,8 @@ export default function App() {
           // Equipment drop rate: 30% for minions, 100% for bosses
           const dropChance = isBossEnemy ? 1.0 : 0.30;
           if (Math.random() < dropChance) {
-            const newEq = generateRandomEquipment(nextGameState.level, undefined, isBossEnemy);
+            const ownedNames = getOwnedItemNames(nextGameState);
+            const newEq = generateRandomEquipment(nextGameState.level, undefined, isBossEnemy, ownedNames);
             
             // Add to player's inventory bag
             nextGameState.inventory = [...(nextGameState.inventory || []), newEq];
@@ -908,8 +917,10 @@ export default function App() {
     } else if (node.type === 'shop') {
       stopBGM();
       setIsMusicPlaying(false);
+      const ownedNames = getOwnedItemNames(gameState);
       const items: ShopItem[] = [1, 2, 3].map(() => {
-        const eq = generateRandomEquipment(gameState.level + gameState.currentLayer, undefined, false);
+        const eq = generateRandomEquipment(gameState.level + gameState.currentLayer, undefined, false, ownedNames);
+        ownedNames.add(eq.name); // also avoid repeating a name within the same shop's 3 offers
         const price = getItemPrice(eq);
         return { equipment: eq, price, sold: false };
       });

@@ -258,22 +258,22 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                     <div
                       key={item.id}
                       className={cn(
-                        'p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all',
+                        'p-3 rounded-2xl border flex flex-col gap-2.5 transition-all',
                         getRarityColor(item.rarity)
                       )}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className="w-12 h-12 rounded-xl bg-black/50 border border-white/10 flex items-center justify-center text-2xl shrink-0">
                           {item.icon}
                         </div>
 
-                        <div className="flex flex-col">
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-xs text-white">{item.name}</span>
-                            <span className={cn('text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase', getRarityBadge(item.rarity))}>
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-extrabold text-xs text-white truncate max-w-[140px]">{item.name}</span>
+                            <span className={cn('text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0', getRarityBadge(item.rarity))}>
                               {item.rarity}
                             </span>
-                            <span className="text-[9px] text-slate-400 uppercase font-semibold">[{item.slot}]</span>
+                            <span className="text-[9px] text-slate-400 uppercase font-semibold shrink-0">[{item.slot}]</span>
                           </div>
 
                           {/* Stats */}
@@ -288,19 +288,19 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
 
                           {/* Passive */}
                           {item.passive && (
-                            <div className="text-[9px] text-amber-300 font-semibold flex items-center gap-1 mt-0.5">
-                              <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
-                              <span>{item.passive.description}</span>
+                            <div className="text-[9px] text-amber-300 font-semibold flex items-start gap-1 mt-0.5 min-w-0">
+                              <Sparkles className="w-3 h-3 text-amber-400 shrink-0 mt-[1px]" />
+                              <span className="min-w-0 break-words">{item.passive.description}</span>
                             </div>
                           )}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 w-full">
                         {/* Equip Button */}
                         <button
                           onClick={() => handleEquip(item)}
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs shadow-md active:scale-95 transition-all flex items-center gap-1"
+                          className="flex-1 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs shadow-md active:scale-95 transition-all flex items-center justify-center gap-1"
                         >
                           EQUIP
                         </button>
@@ -309,7 +309,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({
                         <button
                           onClick={() => handleSell(item)}
                           title="Sell for Gold"
-                          className="px-2.5 py-1.5 rounded-xl bg-slate-900 hover:bg-yellow-950 text-yellow-400 border border-slate-700 hover:border-yellow-500 text-xs font-bold active:scale-95 transition-all flex items-center gap-1"
+                          className="flex-1 py-1.5 rounded-xl bg-slate-900 hover:bg-yellow-950 text-yellow-400 border border-slate-700 hover:border-yellow-500 text-xs font-bold active:scale-95 transition-all flex items-center justify-center gap-1"
                         >
                           <Coins className="w-3 h-3" />+{getItemSellValue(item)}G
                         </button>

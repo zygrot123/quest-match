@@ -146,7 +146,8 @@ export const getItemSellValue = (item: Equipment): number => {
 export const generateRandomEquipment = (
   level: number, 
   slot?: 'head' | 'body' | 'weapon',
-  isBoss: boolean = false
+  isBoss: boolean = false,
+  excludeNames?: Set<string>
 ): Equipment => {
   const selectedSlot = slot || (['head', 'body', 'weapon'][Math.floor(Math.random() * 3)] as 'head' | 'body' | 'weapon');
   
@@ -181,12 +182,17 @@ export const generateRandomEquipment = (
   }
 
   const adjList = adjectives[rarity];
-  const adj = adjList[Math.floor(Math.random() * adjList.length)];
-  
-  let noun = '';
-  if (selectedSlot === 'head') noun = headNouns[Math.floor(Math.random() * headNouns.length)];
-  if (selectedSlot === 'body') noun = bodyNouns[Math.floor(Math.random() * bodyNouns.length)];
-  if (selectedSlot === 'weapon') noun = weaponNouns[Math.floor(Math.random() * weaponNouns.length)];
+  const nounList = selectedSlot === 'head' ? headNouns : selectedSlot === 'body' ? bodyNouns : weaponNouns;
+
+  // Build every adjective+noun combo available for this slot/rarity, and prefer
+  // one the player doesn't already own (in inventory or equipped) so drops feel
+  // fresh instead of handing back the same item name repeatedly.
+  const allCombos = adjList.flatMap(a => nounList.map(n => `${a} ${n}`));
+  const freshCombos = excludeNames ? allCombos.filter(name => !excludeNames.has(name)) : allCombos;
+  const pool = freshCombos.length > 0 ? freshCombos : allCombos; // fall back to allowing a repeat only if every combo is owned
+  const chosenName = pool[Math.floor(Math.random() * pool.length)];
+  const [adj] = chosenName.split(' ');
+  const noun = chosenName.slice(adj.length + 1);
   
   const icon = icons[selectedSlot][Math.floor(Math.random() * icons[selectedSlot].length)];
   
