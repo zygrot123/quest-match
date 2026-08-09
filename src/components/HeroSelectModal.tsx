@@ -87,26 +87,45 @@ export const HeroSelectModal: React.FC<HeroSelectModalProps> = ({ onSelectHero }
             {HEROES.map(hero => {
               const isSelected = hero.id === selectedId;
               return (
-                <div
+                <motion.div
                   key={hero.id}
                   onClick={() => {
                     setSelectedId(hero.id);
                     if (!customName) setCustomName(hero.name);
                   }}
-                  className={`cursor-pointer rounded-2xl p-4 border-2 transition-all duration-300 flex flex-col items-center gap-3 relative overflow-hidden ${
+                  whileHover={{ scale: isSelected ? 1.02 : 1.015, y: -2 }}
+                  whileTap={{ scale: 0.98 }}
+                  className={`cursor-pointer rounded-2xl p-3 border-2 transition-colors duration-300 flex flex-col items-center gap-2 relative overflow-hidden ${
                     isSelected
-                      ? 'border-amber-400 bg-gradient-to-b from-amber-950/80 via-slate-900 to-amber-950/80 shadow-[0_0_25px_rgba(245,158,11,0.5)] scale-[1.02]'
+                      ? 'border-amber-400 bg-gradient-to-b from-amber-950/80 via-slate-900 to-amber-950/80 shadow-[0_0_25px_rgba(245,158,11,0.5)]'
                       : 'border-slate-800 bg-slate-900/60 hover:border-slate-600'
                   }`}
                 >
-                  <div className="my-1 p-1 bg-black/60 rounded-2xl border border-amber-500/30 shadow-inner flex items-center justify-center">
-                    <img 
-                      src={hero.avatarImg} 
-                      alt={hero.name} 
-                      className="w-20 h-20 rounded-xl object-cover border border-amber-400/50 shadow-md"
+                  <motion.div
+                    className="relative w-full aspect-square flex items-center justify-center"
+                    animate={{ y: [0, -4, 0] }}
+                    transition={{ repeat: Infinity, duration: 3.2, ease: 'easeInOut', delay: hero.id === 'lyra' ? 0.4 : 0 }}
+                  >
+                    {/* Soft ambient glow behind the portrait, pulses gently to feel "alive" */}
+                    <motion.div
+                      className={`absolute inset-2 blur-2xl ${hero.id === 'valerius' ? 'bg-amber-500/30 rounded-2xl' : 'bg-fuchsia-500/30 rounded-full'}`}
+                      animate={{ opacity: [0.4, 0.8, 0.4], scale: [0.9, 1.05, 0.9] }}
+                      transition={{ repeat: Infinity, duration: 2.6, ease: 'easeInOut' }}
+                    />
+                    <img
+                      src={hero.avatarImg}
+                      alt={hero.name}
+                      className="relative w-full h-full object-contain drop-shadow-[0_8px_20px_rgba(0,0,0,0.6)]"
                       referrerPolicy="no-referrer"
                     />
-                  </div>
+                    {isSelected && (
+                      <motion.div
+                        className={`absolute inset-0 border-2 border-amber-300/80 pointer-events-none ${hero.id === 'valerius' ? 'rounded-2xl' : 'rounded-full'}`}
+                        animate={{ scale: [1, 1.06, 1], opacity: [0.8, 0.2, 0.8] }}
+                        transition={{ repeat: Infinity, duration: 1.8, ease: 'easeInOut' }}
+                      />
+                    )}
+                  </motion.div>
 
                   <div className="text-center space-y-0.5">
                     <span className="text-[10px] uppercase font-pixel tracking-wider text-amber-400 block">
@@ -128,7 +147,7 @@ export const HeroSelectModal: React.FC<HeroSelectModalProps> = ({ onSelectHero }
                     <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                     <span>{hero.perk}</span>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>
